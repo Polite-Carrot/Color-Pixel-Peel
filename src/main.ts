@@ -32,6 +32,47 @@ function required<T extends HTMLElement>(id: string): T {
   return el as T;
 }
 
+/**
+ * Refuses the browser gestures that make an app feel like a web page.
+ *
+ * The viewport meta asks for no zoom, but iOS Safari has ignored
+ * `user-scalable=no` since iOS 10, so pinch has to be refused directly.
+ * `gesturestart` is WebKit's own pinch event and is what actually stops
+ * it; the touchmove guard covers a two-finger pinch elsewhere. The
+ * context menu is the long-press "copy / share" sheet, which has nothing
+ * to offer on a board of tiles.
+ *
+ * Text selection and the callout are handled in CSS, on every element
+ * rather than on body, since both inherit from whatever was touched.
+ */
+function refuseBrowserGestures(): void {
+  for (const type of ['gesturestart', 'gesturechange', 'gestureend']) {
+    document.addEventListener(type, (event) => event.preventDefault(), { passive: false });
+  }
+
+  document.addEventListener(
+    'touchmove',
+    (event) => {
+      if (event.touches.length > 1) event.preventDefault();
+    },
+    { passive: false },
+  );
+
+  document.addEventListener('contextmenu', (event) => event.preventDefault());
+
+  // A double tap that the CSS does not catch must not zoom either.
+  let lastTouchEnd = 0;
+  document.addEventListener(
+    'touchend',
+    (event) => {
+      const now = Date.now();
+      if (now - lastTouchEnd <= 300) event.preventDefault();
+      lastTouchEnd = now;
+    },
+    { passive: false },
+  );
+}
+
 function boot(): void {
   const canvas = document.getElementById('board');
   const boardEl = document.querySelector('.board');
@@ -68,7 +109,7 @@ function boot(): void {
       canUndo: game.canUndo,
     });
     tray.render({
-      tray: game.tray,
+      columns: game.columns,
       slots: game.slots,
       reachable: (b) => game.reachable(b.color),
       playable: game.status === 'playing',
@@ -188,8 +229,8 @@ function boot(): void {
     );
   };
 
-  const playBlock = (trayIndex: number): void => {
-    const outcome = game.place(trayIndex);
+  const playBlock = (column: number): void => {
+    const outcome = game.place(column);
 
     if (outcome.kind === 'ignored') {
       rejectFeedback();
@@ -298,6 +339,7 @@ function boot(): void {
   syncHud();
   screens.show('home');
   screens.showSaveWarning(storeWarning(), storeKind);
+  refuseBrowserGestures();
   void initNative();
 
   // The letter marks are drawn in Baloo 2, which may not have arrived by

@@ -12,6 +12,8 @@ function levelOf(over: Partial<LevelDef>): LevelDef {
     brief: 'test',
     picture: { rows: ['RR'], legend: { R: RED, B: BLUE } },
     slots: 2,
+    // One column, so these tests play the hand in the order written.
+    columns: 1,
     blocks: [block(RED, 2)],
     ...over,
   };
@@ -35,7 +37,7 @@ describe('placing a block', () => {
     expect(outcome.taken).toHaveLength(3);
     expect(outcome.points).toBe(3 * TILE_SCORE);
     expect(remainingOf(game.board, RED)).toBe(1);
-    expect(game.tray).toHaveLength(0);
+    expect(game.blocksLeft).toHaveLength(0);
   });
 
   it('frees its slot again once fully spent', () => {
@@ -185,7 +187,7 @@ describe('finishing a level', () => {
 describe('undo and restart', () => {
   it('undo puts the picture, tray, slots and score back', () => {
     const game = gameOf(levelOf({ picture: { rows: ['RRRR'], legend: { R: RED } }, blocks: [block(RED, 2)] }));
-    const before = { board: game.board, score: game.score, tray: game.tray.length };
+    const before = { board: game.board, score: game.score, held: game.blocksLeft.length };
 
     game.place(0);
     expect(game.score).toBeGreaterThan(before.score);
@@ -193,7 +195,7 @@ describe('undo and restart', () => {
     expect(game.undo()).toBe(true);
     expect(game.board).toBe(before.board);
     expect(game.score).toBe(before.score);
-    expect(game.tray).toHaveLength(before.tray);
+    expect(game.blocksLeft).toHaveLength(before.held);
     expect(game.canUndo).toBe(false);
   });
 
@@ -220,7 +222,7 @@ describe('undo and restart', () => {
     const game = gameOf(levelOf({ picture: { rows: ['RRRR'], legend: { R: RED } }, blocks: [block(RED, 2)] }));
     game.place(0);
     game.restart();
-    expect(game.tray).toHaveLength(1);
+    expect(game.blocksLeft).toHaveLength(1);
     expect(game.tilesLeft).toBe(4);
     expect(game.status).toBe('playing');
     expect(game.canUndo).toBe(false);
@@ -232,7 +234,8 @@ describe('the real levels', () => {
     const game = new Game(1);
     const def = LEVELS[0] as LevelDef;
     expect(game.level.name).toBe(def.name);
-    expect(game.tray).toHaveLength(def.blocks.length);
+    expect(game.blocksLeft).toHaveLength(def.blocks.length);
+    expect(game.columns).toHaveLength(def.columns);
     expect(game.slots).toHaveLength(def.slots);
     expect(game.tilesLeft).toBeGreaterThan(0);
   });

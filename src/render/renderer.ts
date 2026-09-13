@@ -4,6 +4,8 @@ import { type ColorId, markInk, swatch } from '../core/palette';
 export interface Layout {
   tile: number;
   gap: number;
+  /** Border reserved around the grid for the card it is mounted on. */
+  pad: number;
   originX: number;
   originY: number;
   width: number;
@@ -21,12 +23,20 @@ interface TakeAnim {
   cells: readonly number[];
   color: ColorId;
   start: number;
+  /** Gap between one tile leaving and the next. */
+  stagger: number;
 }
 
-const TAKE_MS = 300;
+/** How long one tile takes to fly off. */
+const TAKE_MS = 260;
+/**
+ * Tiles leave one after another rather than all at once, so a block of
+ * twelve reads as twelve tiles being taken. Scaled down for big takes so
+ * the whole run still lands inside {@link MAX_TAKE_MS}.
+ */
+const MAX_TAKE_MS = 620;
 const MAX_TILE = 64;
 
-const INK = '#2b2142';
 /**
  * The card the picture is mounted on. Cool grey rather than paper white
  * on purpose: `white` is a playable color, and on a white card the dog's
@@ -39,28 +49,41 @@ const CARD_EDGE = 'rgba(43, 33, 66, .16)';
 const EMPTY = 'rgba(43, 33, 66, .07)';
 
 function computeLayout(board: Board, width: number, height: number): Layout {
-  const gap = Math.max(2, Math.round(Math.min(width, height) * 0.008));
-  // Room on the right and bottom for the hard shadow under a raised tile.
-  const bleed = 6;
+  const gap = Math.max(1, Math.round(Math.min(width, height) * 0.006));
+
+  /* The card's border is reserved BEFORE the tiles are sized. Sizing
+     tiles to the full box and then drawing a mount around them put the
+     mount outside the canvas, where it was clipped. Taken as a share of
+     the box rather than of the tile so there is no circularity. */
+  const pad = Math.max(6, Math.round(Math.min(width, height) * 0.028));
+
+  const usableW = width - pad * 2;
+  const usableH = height - pad * 2;
+
+  /* No floor beyond a readable minimum: a bigger picture makes smaller
+     tiles rather than overflowing the card. */
   const tile = Math.max(
-    4,
+    3,
     Math.min(
       MAX_TILE,
       Math.floor(
         Math.min(
-          (width - bleed - gap * (board.cols - 1)) / board.cols,
-          (height - bleed - gap * (board.rows - 1)) / board.rows,
+          (usableW - gap * (board.cols - 1)) / board.cols,
+          (usableH - gap * (board.rows - 1)) / board.rows,
         ),
       ),
     ),
   );
+
   const boardW = tile * board.cols + gap * (board.cols - 1);
   const boardH = tile * board.rows + gap * (board.rows - 1);
+
   return {
     tile,
     gap,
-    originX: Math.round((width - boardW - bleed) / 2),
-    originY: Math.round((height - boardH - bleed) / 2),
+    pad,
+    originX: Math.round((width - boardW) / 2),
+    originY: Math.round((height - boardH) / 2),
     width,
     height,
   };
@@ -117,10 +140,11 @@ export class Renderer {
     this.layout = computeLayout(this.board, cssWidth, cssHeight);
   }
 
-  /** Queues the pop-away animation for tiles just taken. */
+  /** Queues the fly-away animation for tiles just taken. */
   addTake(cells: readonly number[], color: ColorId): void {
     if (cells.length === 0) return;
-    this.anims.push({ cells: cells.slice(), color, start: performance.now() });
+    const stagger = cells.length > 1 ? Math.min(60, MAX_TAKE_MS / cells.length) : 0;
+    this.anims.push({ cells: cells.slice(), color, start: performance.now(), stagger });
   }
 
   clearAnims(): void {
@@ -146,10 +170,6 @@ export class Renderer {
     return { x: originX + x * (tile + gap), y: originY + y * (tile + gap), size: tile };
   }
 
-  private get stroke(): number {
-    return Math.max(1.5, Math.min(3, this.layout.tile * 0.055));
-  }
-
   draw(options: DrawOptions): void {
     const { ctx } = this;
     const now = performance.now();
@@ -158,7 +178,9 @@ export class Renderer {
     ctx.clearRect(0, 0, this.layout.width, this.layout.height);
     ctx.lineJoin = 'round';
 
-    this.anims = this.anims.filter((a) => now - a.start < TAKE_MS);
+    this.anims = this.anims.filter(
+      (a) => now - a.start < a.stagger * (a.cells.length - 1) + TAKE_MS,
+    );
 
     this.drawCard();
     for (let i = 0; i < this.board.tiles.length; i++) this.drawTile(i, options);
@@ -175,7 +197,7 @@ export class Renderer {
   private drawCard(): void {
     const { ctx } = this;
     const { tile, gap, originX, originY } = this.layout;
-    const pad = Math.max(8, tile * 0.5);
+    const pad = this.layout.pad;
     const w = tile * this.board.cols + gap * (this.board.cols - 1);
     const h = tile * this.board.rows + gap * (this.board.rows - 1);
 
@@ -227,30 +249,50 @@ export class Renderer {
     ctx.restore();
   }
 
-  /** Tiles a block just took, popping away. */
+  /**
+   * Tiles a block just took, leaving one after another.
+   *
+   * Each waits its turn drawn in place — so the picture still shows it —
+   * and then flies toward the panel it was played into, shrinking and
+   * fading. A block of twelve therefore reads as twelve tiles being
+   * taken rather than a dozen vanishing at once.
+   */
   private drawTakenTiles(anim: TakeAnim, now: number): void {
     const { ctx } = this;
-    const t = Math.min(1, (now - anim.start) / TAKE_MS);
-    const eased = easeOut(t);
+    const elapsed = now - anim.start;
     const hex = swatch(anim.color).hex;
 
-    ctx.save();
-    ctx.globalAlpha = 1 - eased;
+    // Where they fly to: the panel, which sits below the picture.
+    const toX = this.layout.width / 2;
+    const toY = this.layout.height + this.layout.tile * 2;
 
-    for (const cell of anim.cells) {
+    for (const [i, cell] of anim.cells.entries()) {
+      const local = elapsed - i * anim.stagger;
+      if (local < 0) {
+        // Not its turn yet: still part of the picture.
+        const { x, y, size } = this.cellRect(cell);
+        ctx.fillStyle = hex;
+        roundRect(ctx, x, y, size, size, size * 0.18);
+        ctx.fill();
+        continue;
+      }
+      if (local >= TAKE_MS) continue;
+
+      const t = easeOut(local / TAKE_MS);
       const { x, y, size } = this.cellRect(cell);
-      const grow = 1 + 0.5 * eased;
-      const w = size * grow;
-      const inset = (size - w) / 2;
+      const cx = x + size / 2 + (toX - (x + size / 2)) * t * 0.55;
+      const cy = y + size / 2 + (toY - (y + size / 2)) * t * 0.55;
+      const scale = 1 - 0.55 * t;
 
+      ctx.save();
+      ctx.globalAlpha = 1 - t;
+      ctx.translate(cx, cy);
+      ctx.rotate(t * 0.5);
       ctx.fillStyle = hex;
-      roundRect(ctx, x + inset, y + inset - size * 0.3 * eased, w, w, size * 0.22 * grow);
+      roundRect(ctx, (-size * scale) / 2, (-size * scale) / 2, size * scale, size * scale, size * 0.18 * scale);
       ctx.fill();
-      ctx.lineWidth = this.stroke;
-      ctx.strokeStyle = INK;
-      ctx.stroke();
+      ctx.restore();
     }
-
     ctx.restore();
   }
 }

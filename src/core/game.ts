@@ -6,7 +6,7 @@ import {
   remainingTiles,
   takeColor,
 } from './board';
-import type { Block } from './blocks';
+import { type Block, dealColumns, frontBlocks, remainingBlocks } from './blocks';
 import { type LevelDef, LEVEL_COUNT, levelDef } from './levels';
 import type { ColorId } from './palette';
 
@@ -40,7 +40,7 @@ export type PlaceOutcome =
 
 interface Snapshot {
   board: Board;
-  tray: Block[];
+  columns: Block[][];
   slots: Slot[];
   score: number;
 }
@@ -55,7 +55,7 @@ export class Game {
   private _def: LevelDef;
   private _index: number;
   private _board: Board;
-  private _tray: Block[];
+  private _columns: Block[][];
   private _slots: Slot[];
   private _score = 0;
   private _status: GameStatus = 'playing';
@@ -65,7 +65,7 @@ export class Game {
     this._index = Math.min(Math.max(1, startLevel), LEVEL_COUNT);
     this._def = levelDef(this._index);
     this._board = boardFromPicture(this._def.picture);
-    this._tray = [...this._def.blocks];
+    this._columns = dealColumns(this._def.blocks, this._def.columns);
     this._slots = Game.emptySlots(this._def.slots);
     this._score = carriedScore;
   }
@@ -83,9 +83,22 @@ export class Game {
   get board(): Board {
     return this._board;
   }
-  /** Blocks not yet played, in tray order. */
-  get tray(): readonly Block[] {
-    return this._tray;
+  /**
+   * The hand, as columns. Only `column[0]` of each can be played — the
+   * rest are visible but waiting behind it.
+   */
+  get columns(): readonly (readonly Block[])[] {
+    return this._columns;
+  }
+
+  /** The playable block of each column, or null where a column is spent. */
+  get fronts(): readonly (Block | null)[] {
+    return frontBlocks(this._columns);
+  }
+
+  /** Every block still in hand, playable or not. */
+  get blocksLeft(): readonly Block[] {
+    return remainingBlocks(this._columns);
   }
   get slots(): readonly Slot[] {
     return this._slots;
@@ -118,18 +131,19 @@ export class Game {
   }
 
   /**
-   * Plays the tray block at `trayIndex` into the first free slot.
+   * Plays the front block of `column` into the first free slot.
    *
    * A block takes what it can immediately. If fewer tiles of its color
    * are reachable than it asks for, it takes those and **waits** in its
    * slot for the rest — which is what makes the slots worth something:
    * a block that cannot finish ties one up until the picture opens.
    */
-  place(trayIndex: number): PlaceOutcome {
+  place(column: number): PlaceOutcome {
     if (this._status !== 'playing') return { kind: 'ignored', reason: 'finished' };
 
-    const block = this._tray[trayIndex];
-    if (!block) return { kind: 'ignored', reason: 'no-such-block' };
+    const stack = this._columns[column];
+    const block = stack?.[0];
+    if (!stack || !block) return { kind: 'ignored', reason: 'no-such-block' };
 
     /* A safety net rather than a live path: the cascade lets every slot
        take what it can, so a slot still holding a block has nothing
@@ -141,7 +155,7 @@ export class Game {
 
     this.pushHistory();
 
-    this._tray = this._tray.filter((_, i) => i !== trayIndex);
+    this._columns = this._columns.map((c, i) => (i === column ? c.slice(1) : c));
     this._slots = this._slots.map((s, i) =>
       i === slotIndex ? { block, remaining: block.count } : s,
     );
@@ -158,7 +172,7 @@ export class Game {
     } else if (this.freeSlotIndex() === -1 && !this.canProgress()) {
       // Every slot is tied up by a block with nothing to take.
       this._status = 'stuck';
-    } else if (this._tray.length === 0 && !this.canProgress() && this.freeSlotIndex() !== -1) {
+    } else if (this.blocksLeft.length === 0 && !this.canProgress()) {
       // Nothing left to play and nothing waiting can move.
       this._status = 'stuck';
     }
@@ -218,7 +232,7 @@ export class Game {
     const prev = this._history.pop();
     if (!prev) return false;
     this._board = prev.board;
-    this._tray = prev.tray;
+    this._columns = prev.columns;
     this._slots = prev.slots;
     this._score = prev.score;
     this._status = 'playing';
@@ -227,7 +241,7 @@ export class Game {
 
   restart(): void {
     this._board = boardFromPicture(this._def.picture);
-    this._tray = [...this._def.blocks];
+    this._columns = dealColumns(this._def.blocks, this._def.columns);
     this._slots = Game.emptySlots(this._def.slots);
     this._status = 'playing';
     this._history = [];
@@ -244,7 +258,7 @@ export class Game {
   private pushHistory(): void {
     this._history.push({
       board: this._board,
-      tray: [...this._tray],
+      columns: this._columns.map((c) => [...c]),
       slots: this._slots.map((s) => ({ ...s })),
       score: this._score,
     });

@@ -7,53 +7,87 @@ A mobile puzzle game for iOS and Android, in the same visual world as
 
 ## The game
 
-Three parts, matching the reference:
+Three parts:
 
 1. **The picture** — pixel art built from colored tiles, mounted on a card.
-2. **The panel** — a row of slots above the blocks, where a played block goes.
-3. **The blocks** — numbered color chips in a tray. A `12` on dark takes twelve
-   dark tiles off the picture.
+2. **The panel** — a row of slots where a played block goes.
+3. **The hand** — numbered color blocks dealt into columns below the panel.
 
-Play a block and it immediately takes as many tiles of its color as it can.
-Clear the whole picture and the level is done.
+Play a block and it takes that many tiles of its color off the picture. Clear
+the whole picture and the level is done.
+
+### Only the front of each column can be played
+
+The hand is dealt into columns, and just the front block of each is playable —
+the ones behind are drawn above it, smaller, so what is coming can be planned
+for. Columns are therefore how much choice the player has at any moment,
+which is the tightest constraint in the game. A block you need but cannot
+reach yet is exactly the thing to make room for.
 
 ### What "accessible" means
 
 A tile can only be taken when it can be reached from outside the artwork: it
-touches background on some side, or sits on the board's edge. So at the start
-only the picture's outline is available, and opening it up is what reaches the
-tiles behind. It is why the dog's muzzle, nose and ears cannot be taken first
-— they are walled in by the head.
+touches background on some side, or sits on the picture's edge. So the way in
+is always the edge, and opening it up reaches what is behind.
 
-That is also what gives the panel a job. A block whose color has nothing
-showing still plays, but it **waits in its slot** for tiles to appear instead
-of taking any. Tie up every slot with blocks that cannot move and there is no
-way on — so the slot count is how many mistimed blocks a level lets you get
-away with.
+That is not a detail — it is most of the puzzle. Every one of these pictures
+is drawn with a dark outline, and an outline **encloses its own fill**. On the
+Heart the red is walled in completely, so a red block played first has
+nowhere to go at all.
 
-One removal can expose tiles another slot was waiting on, so after every play
-the panel re-resolves until nothing more moves. A single block can cascade.
+A block whose color has nothing showing still plays, but **waits in its slot**
+for tiles to appear instead of taking any. Tie up every slot with blocks that
+cannot move and there is no way on — so the slot count is how many mistimed
+blocks a level lets you get away with. One removal can expose tiles another
+slot was waiting on, so after every play the panel re-resolves until nothing
+more moves: a single block can cascade.
 
-### Reachability is shown in the tray, not on the picture
+### Reachability is shown in the hand, not on the picture
 
-A block whose color has nothing available is drawn hatched and desaturated,
-which is where the player looks to understand why nothing happened.
+A block whose color has nothing available is drawn hatched and desaturated.
+That is where the player looks to understand why nothing happened.
 
 An earlier version marked it up on the picture instead — every reachable tile
 raised with an ink outline and a hard shadow. That worked on a board of five
 big blocks and destroyed this: a picture stops reading as a picture the moment
-each tile is drawn as a separate object. The artwork is now flat fills on a
-cool grey mount, and the mount is grey rather than white because `white` is a
+each tile is drawn as a separate object. The artwork is flat fills on a cool
+grey mount, and the mount is grey rather than white because `white` is a
 playable color and the dog's muzzle vanished against paper.
+
+### Taking tiles is animated one at a time
+
+A block of twelve should read as twelve tiles being taken, not a dozen
+vanishing at once. Each tile waits its turn — drawn in place, so the picture
+still shows it — and then flies toward the panel, shrinking and turning as it
+goes. The stagger shrinks as the take grows so even a big block lands inside
+about two thirds of a second.
+
+### Levels, and the curve
+
+| | Picture | Tiles | Colors | Slots | Columns |
+|--|---------|-------|--------|-------|---------|
+| 1 | Heart | 40 | 2 | 5 | 3 |
+| 2 | Star | 43 | 2 | 5 | 3 |
+| 3 | Good dog | 134 | 5 | 5 | 3 |
+| 4 | Cat | 140 | 4 | 4 | 4 |
+
+Difficulty is turned with four things and deliberately not with luck: how big
+and tangled the picture is, how many colors it holds, how many slots there are
+to park a mistimed block in, and how many columns the hand is dealt into. The
+first two levels are meant to be walked through; from the third the picture
+buries more of itself and the order blocks come up in starts to matter.
 
 ### Levels are balanced, and checked
 
 A level's blocks add up to its picture's tile counts **exactly** — nothing
-spare, nothing missing — so clearing the picture means spending every block.
+spare, nothing missing — so clearing the picture means spending every block,
+and a block wasted early is a level that can no longer be finished.
+
 `levels.test.ts` checks that per color, checks no two colors in one picture sit
-closer than the distance rule allows, checks at least one color starts buried
-(or the panel would never teach anything), and plays each level through
-greedily to prove it can actually be won.
+closer than the distance rule allows, checks every picture has tiles that must
+be uncovered first, checks the curve never shrinks, and plays each level
+through **respecting the column constraint** — only ever choosing between the
+fronts — to prove it can actually be won.
 
 ## The screens
 
@@ -186,7 +220,7 @@ npm install
 npm run build      # typecheck + bundle src/ into app/
 npm run dev        # rebuild app/ on every save
 npm run serve      # serve the repo root, i.e. the real artifact
-npm test           # 60 unit tests
+npm test           # 96 unit tests
 npm run typecheck
 ```
 
@@ -283,6 +317,29 @@ The assist preference is kept under its own key, well away from the record of
 progress: a preference is not something earned, and writing it must never put
 anything near progress.
 
+## It is an app, not a web page
+
+This ships to the App Store and Play, where anything that behaves like a web
+page reads as a bug. Four are switched off deliberately:
+
+- **Text selection and the long-press callout**, set on every element rather
+  than on `body` alone, because both inherit from whatever was actually
+  touched. Selecting the briefing or getting a "copy / share" sheet on a tile
+  has nothing to offer.
+- **Double-tap zoom**, via `touch-action: manipulation`, which also removes the
+  300ms wait before a tap registers.
+- **Pinch zoom**, refused in JS. The viewport meta asks for no zoom, but iOS
+  Safari has ignored `user-scalable=no` since iOS 10, so `gesturestart` —
+  WebKit's own pinch event — is what actually stops it, with a two-finger
+  `touchmove` guard behind it.
+- **Image dragging**, so the startup lockup cannot be pulled around.
+
+Nothing scrolls. The layout is sized to the visual viewport and the picture
+gives up height to whatever else needs it, so the hand and the toolbar are
+always reachable — checked at 375×667 and 390×844 on every level, including
+the largest, where the tiles come out 240px tall's worth of board and simply
+render smaller.
+
 ## Mobile and accessibility details
 
 - **Safe areas**: the layout pads with `env(safe-area-inset-*)` under
@@ -327,8 +384,10 @@ anything near progress.
 - When more tiles of a color are reachable than a block asks for, it takes the
   ones nearest the top-left. That is consistent and predictable but arbitrary —
   if the player should be choosing, this is the rule to change.
-- The tray scrolls past two rows of blocks. Fine for fourteen; a picture with
-  forty blocks needs a different answer.
+- Four levels. The curve has room in it but the pictures are hand-drawn, and
+  that is the slow part.
+- The hand shows three blocks behind each front one and then a `+n`. A much
+  longer column would need a different answer than a count.
 - No sound. Color Match makes its blips with oscillators rather than audio
   files, which is the approach to copy when it is added.
 - Below 420px the topbar's back button drops the word "Menu" and keeps the

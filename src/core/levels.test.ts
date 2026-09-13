@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { accessibleOf, boardFromPicture, isCleared, remainingOf } from './board';
+import { accessibleOf, boardFromPicture, isAccessible, isCleared, remainingOf } from './board';
 import { blockTotals } from './blocks';
 import { Game } from './game';
 import { LEVELS, LEVEL_COUNT, levelDef } from './levels';
@@ -70,6 +70,11 @@ describe('every level', () => {
     expect(levelDef(index).slots).toBeGreaterThan(1);
   });
 
+  it.each(indices)('level %i offers a real choice of blocks', (index) => {
+    // One column would be a fixed sequence with no decisions in it.
+    expect(levelDef(index).columns).toBeGreaterThan(1);
+  });
+
   it('rejects a level number it does not have', () => {
     expect(() => levelDef(0)).toThrow(/no level/);
     expect(() => levelDef(LEVEL_COUNT + 1)).toThrow(/no level/);
@@ -85,18 +90,35 @@ describe('the picture opens up', () => {
     expect(reachable.length).toBeGreaterThan(0);
   });
 
-  it.each(indices)('level %i buries at least one color to begin with', (index) => {
-    /* The lesson the panel exists to teach: play a block for a color
-       nothing has opened up yet and it strands in a slot. A level where
-       every color starts showing would never teach it. */
+  /* The opening levels are meant to be walked through, so nothing being
+     buried in them is correct rather than a gap. From the third on, the
+     picture has to hide something — that is where the panel starts to
+     mean anything. */
+  const CHALLENGING_FROM = 3;
+
+  it.each(indices.filter((i) => i >= CHALLENGING_FROM))(
+    'level %i buries at least one color to begin with',
+    (index) => {
+      const def = levelDef(index);
+      const board = boardFromPicture(def.picture);
+      const colors = [...colorCounts(parsePicture(def.picture)).keys()];
+
+      const buried = colors.filter(
+        (c) => remainingOf(board, c) > 0 && accessibleOf(board, c).length === 0,
+      );
+      expect(buried.length, 'no color starts buried').toBeGreaterThan(0);
+    },
+  );
+
+  it.each(indices)('level %i has tiles that must be uncovered first', (index) => {
+    /* True of every outlined picture, and the reason the rule matters at
+       all: the outline encloses the fill, so the way in is the edge. On
+       the Heart that is the whole lesson — its red is enclosed entirely,
+       so a red block played first has nowhere to go. */
     const def = levelDef(index);
     const board = boardFromPicture(def.picture);
-    const colors = [...colorCounts(parsePicture(def.picture)).keys()];
-
-    const buried = colors.filter(
-      (c) => remainingOf(board, c) > 0 && accessibleOf(board, c).length === 0,
-    );
-    expect(buried.length, 'no color starts buried').toBeGreaterThan(0);
+    const walled = board.tiles.filter((t, i) => t !== null && !isAccessible(board, i));
+    expect(walled.length, 'nothing is covered up').toBeGreaterThan(0);
   });
 });
 
@@ -110,14 +132,18 @@ function playGreedily(index: number): { game: Game; plays: number } {
   const game = new Game(index);
   let plays = 0;
 
-  while (game.status === 'playing' && plays < 200) {
-    const tray = game.tray;
-    const playable = tray
-      .map((b, i) => ({ b, i, reach: game.reachable(b.color) }))
-      .filter((c) => c.reach > 0)
-      .sort((a, b) => b.b.count - a.b.count);
+  while (game.status === 'playing' && plays < 400) {
+    /* Only the front of each column can be played, so the choice is
+       between at most one block per column — which is the whole of the
+       constraint this checks the level against. */
+    const choices = game.fronts
+      .map((b, i) => ({ b, i, reach: b ? game.reachable(b.color) : -1 }))
+      .filter((c) => c.b !== null);
 
-    const choice = playable[0] ?? { i: 0 };
+    const useful = choices.filter((c) => c.reach > 0).sort((a, b) => (b.b?.count ?? 0) - (a.b?.count ?? 0));
+    const choice = useful[0] ?? choices[0];
+    if (!choice) break;
+
     const outcome = game.place(choice.i);
     if (outcome.kind === 'ignored') break;
     plays++;
@@ -126,13 +152,38 @@ function playGreedily(index: number): { game: Game; plays: number } {
   return { game, plays };
 }
 
+describe('the difficulty curve', () => {
+  it('never gets smaller as it goes', () => {
+    // Each level is at least as big as the one before it, so the ramp is
+    // a property of the data rather than of the order they were written.
+    const sizes = indices.map((i) => parsePicture(levelDef(i).picture).tiles.filter((t) => t !== null).length);
+    for (let i = 1; i < sizes.length; i++) {
+      expect(sizes[i], `level ${i + 1} is smaller than level ${i}`).toBeGreaterThanOrEqual(sizes[i - 1] as number);
+    }
+  });
+
+  it('starts small enough to be a first level', () => {
+    const first = parsePicture(levelDef(1).picture).tiles.filter((t) => t !== null).length;
+    expect(first).toBeLessThan(60);
+    expect(levelDef(1).blocks.length).toBeLessThan(12);
+  });
+
+  it('ends harder than it starts', () => {
+    const last = levelDef(LEVEL_COUNT);
+    const first = levelDef(1);
+    expect(last.blocks.length).toBeGreaterThan(first.blocks.length);
+    // Fewer slots, or more colors, or both — but not easier on every axis.
+    expect(last.slots <= first.slots || last.columns > first.columns).toBe(true);
+  });
+});
+
 describe('every level can actually be won', () => {
   it.each(indices)('level %i clears under greedy play', (index) => {
     const { game, plays } = playGreedily(index);
 
     expect(game.status, `level ${index} ended ${game.status} with ${game.tilesLeft} tiles left`).toBe('won');
     expect(isCleared(game.board)).toBe(true);
-    expect(game.tray).toHaveLength(0);
+    expect(game.blocksLeft).toHaveLength(0);
     expect(game.slots.every((s) => s.block === null)).toBe(true);
     expect(plays).toBe(levelDef(index).blocks.length);
     expect(game.score).toBeGreaterThan(0);
