@@ -48,7 +48,7 @@ export function levelConfig(index: number): LevelConfig {
     // portrait grid fills it without shrinking the touch targets.
     cols: Math.min(4 + Math.floor(n / 4), 8),
     rows: Math.min(5 + Math.floor(n / 2), 11),
-    colors: Math.min(3 + Math.floor(n / 4), Math.min(6, MAX_COLORS)),
+    colors: Math.min(3 + Math.floor(n / 4), Math.min(7, MAX_COLORS)),
     targetMoves: 6 + n * 2,
     maxStamp: Math.min(4 + Math.floor(n / 4), 7),
   };

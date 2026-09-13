@@ -1,5 +1,5 @@
 import { type Board, coords, depthAt, idx, topColor } from '../core/board';
-import { type ColorId, swatch } from '../core/palette';
+import { type ColorId, markInk, swatch } from '../core/palette';
 
 export interface Layout {
   tile: number;
@@ -11,9 +11,9 @@ export interface Layout {
 }
 
 export interface DrawOptions {
-  /** Draw per-color glyphs for color-vision accessibility. */
-  symbols: boolean;
-  /** Cell currently under the player's finger, highlighted. */
+  /** Draw a letter on every color — Color Blind Assist. */
+  assist: boolean;
+  /** Cell currently under the player's finger. */
   pressed?: number | null;
 }
 
@@ -23,26 +23,36 @@ interface PeelAnim {
   start: number;
 }
 
-const PEEL_MS = 260;
+const PEEL_MS = 280;
 /** How many layers under the top get a visible offset edge. */
 const DEPTH_HINT = 3;
 /**
- * Upper bound on tile size in CSS px. Without it a small grid on a
- * tablet renders as a few enormous blocks; capping keeps the board
- * looking like a board and lets it sit centred in the space.
+ * Upper bound on tile size in CSS px. Without it a small grid on a tablet
+ * renders as a few enormous blocks; capping keeps the board looking like a
+ * board and lets it sit centred in the space.
  */
 const MAX_TILE = 96;
 
+const INK = '#2b2142';
+/** Ink at reduced strength, for the socket a cleared cell leaves behind. */
+const INK_GHOST = 'rgba(43, 33, 66, .3)';
+const GLASS = 'rgba(255, 255, 255, .38)';
+
 function computeLayout(board: Board, width: number, height: number): Layout {
-  const gap = Math.max(2, Math.round(Math.min(width, height) * 0.012));
+  // Must clear the hard shadow below each tile, or a shadow lands on the
+  // tile beneath it.
+  const gap = Math.max(6, Math.round(Math.min(width, height) * 0.016));
+  // Leave room on the right and bottom for the stack offsets and the hard
+  // shadow, which are drawn outside the tile's own box.
+  const bleed = 8;
   const tile = Math.max(
     4,
     Math.min(
       MAX_TILE,
       Math.floor(
         Math.min(
-          (width - gap * (board.cols - 1)) / board.cols,
-          (height - gap * (board.rows - 1)) / board.rows,
+          (width - bleed - gap * (board.cols - 1)) / board.cols,
+          (height - bleed - gap * (board.rows - 1)) / board.rows,
         ),
       ),
     ),
@@ -52,8 +62,8 @@ function computeLayout(board: Board, width: number, height: number): Layout {
   return {
     tile,
     gap,
-    originX: Math.round((width - boardW) / 2),
-    originY: Math.round((height - boardH) / 2),
+    originX: Math.round((width - boardW - bleed) / 2),
+    originY: Math.round((height - boardH - bleed) / 2),
     width,
     height,
   };
@@ -117,7 +127,7 @@ export class Renderer {
     this.layout = computeLayout(this.board, cssWidth, cssHeight);
   }
 
-  /** Queues the fly-off animation for a peeled region. */
+  /** Queues the lift-away animation for a peeled region. */
   addPeel(cells: readonly number[], color: ColorId): void {
     this.anims.push({ cells: cells.slice(), color, start: performance.now() });
   }
@@ -134,8 +144,8 @@ export class Renderer {
     const row = Math.floor((y - originY) / step);
     if (col < 0 || row < 0 || col >= this.board.cols || row >= this.board.rows) return null;
 
-    // Reject taps landing in the gap rather than snapping to a neighbour,
-    // so a misfire never peels the wrong region.
+    // Reject a tap landing in the gap rather than snapping it to a
+    // neighbour, so a misfire never peels the wrong region.
     const localX = x - originX - col * step;
     const localY = y - originY - row * step;
     if (localX > tile || localY > tile) return null;
@@ -149,16 +159,26 @@ export class Renderer {
     return { x: originX + x * (tile + gap), y: originY + y * (tile + gap), size: tile };
   }
 
+  private get stroke(): number {
+    return Math.max(2, Math.min(3.5, this.layout.tile * 0.045));
+  }
+
+  /** Hard-shadow offset, the tile's equivalent of the CSS --lift. */
+  private get lift(): number {
+    return Math.max(3, Math.min(5, this.layout.tile * 0.06));
+  }
+
   draw(options: DrawOptions): void {
     const { ctx } = this;
     const now = performance.now();
 
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     ctx.clearRect(0, 0, this.layout.width, this.layout.height);
+    ctx.lineJoin = 'round';
 
     this.anims = this.anims.filter((a) => now - a.start < PEEL_MS);
 
-    // Cells being revealed right now scale up from the peel animation.
+    // Cells being uncovered right now rise into place.
     const revealing = new Map<number, number>();
     for (const anim of this.anims) {
       const t = Math.min(1, (now - anim.start) / PEEL_MS);
@@ -170,84 +190,132 @@ export class Renderer {
     }
 
     for (const anim of this.anims) {
-      this.drawPeelingLayer(anim, now);
+      this.drawLiftedLayer(anim, now, options);
     }
   }
 
   private drawCell(i: number, options: DrawOptions, revealT: number | undefined): void {
     const { ctx } = this;
     const { x, y, size } = this.cellRect(i);
-    const radius = size * 0.22;
+    const radius = size * 0.24;
+    const stroke = this.stroke;
     const color = topColor(this.board, i);
 
     if (color === null) {
-      // Hole: a recessed well, so cleared space reads as progress.
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.04)';
+      // A cleared cell leaves a cool empty socket, the way an emptied jar
+      // reads as glass rather than as nothing.
+      ctx.fillStyle = GLASS;
       roundRect(ctx, x, y, size, size, radius);
       ctx.fill();
+      ctx.lineWidth = stroke * 0.7;
+      ctx.strokeStyle = INK_GHOST;
+      ctx.stroke();
       return;
     }
 
     const depth = depthAt(this.board, i);
     const stack = this.board.cells[i] as readonly ColorId[];
-    const offset = Math.max(2, size * 0.055);
 
-    // Layers underneath peek out down-right, using their own colors, so
-    // the player can read how deep a cell is and plan ahead.
+    // Pressed tiles sink into the page and lose their shadow — the same
+    // gesture the buttons make.
+    const lift = this.lift;
+    const sunk = options.pressed === i;
+    const rise = revealT === undefined ? 0 : (1 - easeOut(revealT)) * size * 0.14;
+    const ty = y - rise + (sunk ? lift : 0);
+
+    if (!sunk) {
+      // One hard, unblurred shadow straight down, like every raised thing
+      // in the house style.
+      ctx.fillStyle = INK;
+      roundRect(ctx, x, ty + lift, size, size, radius);
+      ctx.fill();
+    }
+
+    // Depth is drawn as bands inside the tile rather than as tiles peeking
+    // out behind it: the layers underneath read the way a jar's bands do,
+    // and nothing bleeds into the neighbouring cell.
     const hints = Math.min(DEPTH_HINT, depth - 1);
+    const bandH = hints > 0 ? Math.max(5, Math.min(14, size * 0.13)) : 0;
+    const topArea = size - hints * bandH;
+
+    ctx.save();
+    roundRect(ctx, x, ty, size, size, radius);
+    ctx.clip();
+
+    ctx.fillStyle = swatch(color).hex;
+    ctx.fillRect(x, ty, size, size);
+
     for (let k = hints; k >= 1; k--) {
       const beneath = stack[depth - 1 - k];
       if (beneath === undefined) continue;
-      ctx.fillStyle = swatch(beneath).shadeHex;
-      roundRect(ctx, x + k * offset, y + k * offset, size, size, radius);
-      ctx.fill();
+      const bandTop = ty + size - (hints - k + 1) * bandH;
+      ctx.fillStyle = swatch(beneath).hex;
+      ctx.fillRect(x, bandTop, size, bandH);
+      // A hairline of ink between bands, so two similar colors still part.
+      ctx.fillStyle = INK;
+      ctx.fillRect(x, bandTop, size, Math.max(1, stroke * 0.5));
     }
 
-    let scale = 1;
-    if (revealT !== undefined) scale = 0.82 + 0.18 * easeOut(revealT);
-    if (options.pressed === i) scale *= 0.94;
+    // A soft highlight across the top color only, for a little roundness
+    // without blurring the cartoon weight.
+    ctx.fillStyle = 'rgba(255, 255, 255, .26)';
+    ctx.fillRect(x + stroke, ty + stroke, size - stroke * 2, Math.max(2, topArea * 0.26));
 
-    const inset = (size * (1 - scale)) / 2;
-    const top = swatch(color);
+    ctx.restore();
 
-    ctx.fillStyle = top.hex;
-    roundRect(ctx, x + inset, y + inset, size * scale, size * scale, radius * scale);
-    ctx.fill();
+    ctx.lineWidth = stroke;
+    ctx.strokeStyle = INK;
+    roundRect(ctx, x, ty, size, size, radius);
+    ctx.stroke();
 
-    // A top-edge highlight gives the tile a slight bevel.
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.16)';
-    roundRect(ctx, x + inset, y + inset, size * scale, Math.max(1, size * scale * 0.16), radius * scale);
-    ctx.fill();
-
-    if (options.symbols) {
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-      ctx.font = `700 ${Math.round(size * 0.42)}px -apple-system, system-ui, sans-serif`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(top.symbol, x + size / 2, y + size / 2 + size * 0.02);
+    if (options.assist) {
+      // Centred in the top colour's own area, clear of the depth bands.
+      this.drawMark(color, x + size / 2, ty + topArea / 2, Math.min(size, topArea * 1.6));
     }
   }
 
-  /** The layer that just came off, flying outward and fading. */
-  private drawPeelingLayer(anim: PeelAnim, now: number): void {
+  private drawMark(color: ColorId, cx: number, cy: number, size: number): void {
+    const { ctx } = this;
+    ctx.fillStyle = markInk(color);
+    ctx.font = `800 ${Math.round(size * 0.44)}px "Baloo 2", ui-rounded, system-ui, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(swatch(color).mark, cx, cy + size * 0.03);
+  }
+
+  /** The layer that just came off, lifting and tilting away. */
+  private drawLiftedLayer(anim: PeelAnim, now: number, options: DrawOptions): void {
     const { ctx } = this;
     const t = Math.min(1, (now - anim.start) / PEEL_MS);
     const eased = easeOut(t);
-    const color = swatch(anim.color);
+    const hex = swatch(anim.color).hex;
+    const stroke = this.stroke;
 
     ctx.save();
-    ctx.globalAlpha = 1 - eased;
+    ctx.globalAlpha = 1 - eased * eased;
 
     for (const cell of anim.cells) {
       const { x, y, size } = this.cellRect(cell);
-      const grow = 1 + 0.4 * eased;
-      const drift = size * 0.22 * eased;
-      const w = size * grow;
-      const inset = (size - w) / 2;
+      const radius = size * 0.24;
+      const lift = size * 0.34 * eased;
+      const grow = 1 + 0.16 * eased;
 
-      ctx.fillStyle = color.hex;
-      roundRect(ctx, x + inset, y + inset - drift, w, w, size * 0.22 * grow);
+      // Tilt as it lifts — the same gesture a picked-up jar makes.
+      ctx.save();
+      ctx.translate(x + size / 2, y + size / 2 - lift);
+      ctx.rotate(-0.14 * eased);
+      ctx.scale(grow, grow);
+
+      ctx.fillStyle = hex;
+      roundRect(ctx, -size / 2, -size / 2, size, size, radius);
       ctx.fill();
+      ctx.lineWidth = stroke;
+      ctx.strokeStyle = INK;
+      ctx.stroke();
+
+      if (options.assist) this.drawMark(anim.color, 0, 0, size);
+
+      ctx.restore();
     }
 
     ctx.restore();

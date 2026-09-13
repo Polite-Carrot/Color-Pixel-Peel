@@ -1,96 +1,213 @@
+/* Color Pixel Peel — styles
+ *
+ * The same committed visual world as Color Match & Merge: a bright board
+ * under a summer sky, drawn with cartoon weight — thick ink outlines and
+ * hard, unblurred drop shadows. The weight is doing a job, not decorating:
+ * the pixel colors are vivid and so is the ground, so without an outline
+ * around every tile the two would sit at the same brightness and flatten
+ * into each other.
+ *
+ * Deliberately single-theme, so there are no prefers-color-scheme blocks —
+ * a game screen is a place, not a document. Every color below is painted
+ * explicitly and the page holds whatever ground the viewer's own theme
+ * paints behind it.
+ *
+ * Every size here is in px on purpose; there is not a single rem, so the
+ * layout is immune to a changed root font size. */
+
 :root {
-  --bg: #0d1017;
-  --surface: #161b26;
-  --surface-hi: #1f2633;
-  --border: #2b3444;
-  --text: #e8ecf4;
-  --text-dim: #8a95a8;
-  --accent: #5ac8fa;
-  --danger: #ff6b6b;
+  /* the scene */
+  --sky-top:   #79cbf2;
+  --sky-mid:   #a5e2fa;
+  --sky-low:   #d3f1fc;
 
-  --radius: 14px;
-  --hud-gap: 10px;
+  /* surfaces and ink */
+  --paper:     #fffdf7;
+  --paper-warm:#fff3e0;
+  --ink:       #2b2142;
+  --ink-soft:  #6f6389;
+  --ink-faint: rgba(43, 33, 66, .16);
 
-  /* Safe-area insets, defaulted to 0 for browsers/desktop. */
-  --sat: env(safe-area-inset-top, 0px);
-  --sab: env(safe-area-inset-bottom, 0px);
-  --sal: env(safe-area-inset-left, 0px);
-  --sar: env(safe-area-inset-right, 0px);
+  /* action */
+  --accent:      #ff5d8f;
+  --accent-deep: #e0446f;
+  --gold:        #ffc93c;
+  --grass:       #35c46b;
+  --danger:      #d8365f;
+
+  --lift:   4px;                       /* hard-shadow offset on raised things */
+  --stroke: 3px;
+  --radius: 16px;
 }
 
-* {
-  box-sizing: border-box;
-}
+/* Pseudo-elements are NOT matched by `*`, and some here are sized boxes
+   with borders, which would otherwise render a border-width too tall. */
+*, *::before, *::after { box-sizing: border-box; }
 
-html,
-body {
+html, body {
   margin: 0;
-  padding: 0;
   height: 100%;
   overflow: hidden;
-  background: var(--bg);
-  color: var(--text);
-  font: 600 16px/1.4 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
-    'Helvetica Neue', Arial, sans-serif;
-
-  /* A game canvas should never pan, zoom, select or flash a tap
-     highlight under the player's thumb. */
-  touch-action: manipulation;
-  -webkit-user-select: none;
-  user-select: none;
-  -webkit-tap-highlight-color: transparent;
   overscroll-behavior: none;
+  /* Pin the text scale. Chrome and Android WebView apply the system font
+     size setting to page text, multiplying every computed font-size and
+     nothing else — which breaks a layout sized by its contents rather
+     than growing it. */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  /* Without this WebKit paints its own translucent grey box over whatever
+     was tapped, which on a tile reads as a dark flash on every tap. Every
+     target here has its own pressed styling, so the browser's is noise. */
+  -webkit-tap-highlight-color: transparent;
 }
 
-#app {
+body {
+  /* An explicit color under the gradient: the gradient is a background
+     IMAGE, so without this the computed background-color stays
+     transparent and the page composites over the host's ground. */
+  background-color: var(--sky-mid);
+  background-image:
+    linear-gradient(180deg, var(--sky-top) 0%, var(--sky-mid) 42%, var(--sky-low) 100%);
+  background-attachment: fixed;
+  color: var(--ink);
+  font: 16px/1.55 "Nunito", ui-rounded, "Segoe UI", system-ui, sans-serif;
+  font-weight: 600;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ───────── Polite Carrot startup lockup, shared with Color Match ───────── */
+
+#boot {
+  position: fixed;
+  inset: 0;
+  height: 100vh;
+  height: 100dvh;
+  z-index: 100;
+  background: #000;
+  display: grid;
+  place-items: center;
+  /* Even a stuck splash must never swallow a tap. */
+  pointer-events: none;
+  opacity: 1;
+  transition: opacity 0.55s ease;
+}
+#boot.done { opacity: 0; }
+.boot-lockup {
+  display: grid;
+  justify-items: center;
+  width: min(68vw, 52vh, 360px);
+}
+.boot-mark {
+  display: block;
+  width: 92%;
+  height: auto;
+  opacity: 0;
+  transform: scale(0.94);
+  animation: boot-logo 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) 0.18s forwards;
+}
+.boot-name {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin-top: 12px;
+  opacity: 0;
+  transform: translateY(8px);
+  animation: boot-name 0.55s ease 0.72s forwards;
+}
+@keyframes boot-logo { to { opacity: 1; transform: scale(1); } }
+@keyframes boot-name { to { opacity: 1; transform: translateY(0); } }
+
+/* ───────── frame ───────── */
+
+.app {
+  max-width: 1040px;
+  margin: 0 auto;
+  /* --vvh is the visual viewport, published by main.ts. Preferred over dvh
+     because dvh resolves to the viewport with the browser's toolbars
+     retracted — the tallest it could be — and on iOS Safari the toolbar is
+     drawn over the page, so a board sized to dvh runs underneath it. */
+  height: 100vh;
+  height: 100dvh;
+  height: var(--vvh, 100dvh);
   display: flex;
   flex-direction: column;
-  height: 100%;
-  padding: calc(var(--sat) + 10px) calc(var(--sar) + 12px)
-    calc(var(--sab) + 10px) calc(var(--sal) + 12px);
-  gap: var(--hud-gap);
+  gap: 10px;
+  overflow: hidden;
+  /* Clear of the iOS status bar / notch and the Android gesture area. */
+  padding:
+    calc(12px + env(safe-area-inset-top))
+    calc(18px + env(safe-area-inset-right))
+    calc(12px + env(safe-area-inset-bottom))
+    calc(18px + env(safe-area-inset-left));
 }
 
-/* ---------- HUD ---------- */
+/* ───────── game chrome ───────── */
 
-.hud {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
-  flex: 0 0 auto;
-}
-
-.hud__stat {
-  background: var(--surface);
-  border: 1px solid var(--border);
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex: none;
+  background: var(--paper);
+  border: var(--stroke) solid var(--ink);
   border-radius: var(--radius);
-  padding: 7px 4px 8px;
-  text-align: center;
-  transition: border-color 0.2s, background 0.2s;
+  padding: 11px 16px;
+  box-shadow: 0 5px 0 var(--ink);
 }
-
-.hud__stat--warn {
-  border-color: var(--danger);
-  background: color-mix(in srgb, var(--danger) 14%, var(--surface));
-}
-
-.hud__label {
-  display: block;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
-  color: var(--text-dim);
-}
-
-.hud__value {
-  display: block;
-  font-size: 20px;
+.topbar__title { flex: 1; min-width: 0; text-align: center; }
+.topbar__title h2 {
+  margin: 0;
+  font-family: "Baloo 2", sans-serif;
   font-weight: 800;
+  font-size: 22px;
+  line-height: 1.1;
+}
+.topbar__title span {
+  color: var(--ink-soft);
+  font-size: 13px;
   font-variant-numeric: tabular-nums;
 }
 
-/* ---------- Board ---------- */
+.topbar__stats { display: flex; gap: 8px; }
+.stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1.05;
+  min-width: 52px;
+  padding: 5px 8px;
+  border-radius: 11px;
+  border: 2px solid var(--ink);
+  background: var(--paper-warm);
+}
+.stat b {
+  font-family: "Baloo 2", sans-serif;
+  font-weight: 800;
+  font-size: 21px;
+  font-variant-numeric: tabular-nums;
+}
+.stat small {
+  color: var(--ink-soft);
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+}
+/* The last few moves. Gold rather than red: a warning, not a failure. */
+.stat.is-low { background: var(--gold); }
+
+.brief {
+  margin: 0 auto;
+  max-width: 56ch;
+  text-align: center;
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 700;
+  text-wrap: balance;
+  flex: none;
+}
+
+/* ───────── board ───────── */
 
 .board {
   position: relative;
@@ -103,125 +220,156 @@ body {
 
 #board {
   display: block;
-  /* Actual pixel size is set by the renderer for device-pixel-ratio
-     correctness; these just stop it overflowing its flex parent. */
+  /* The pixel size is set by the renderer for device-pixel-ratio
+     correctness; these only stop it overflowing its flex parent. */
   max-width: 100%;
   max-height: 100%;
+  /* The board must never pan or zoom under a thumb. */
   touch-action: none;
 }
 
-/* ---------- Overlay ---------- */
-
-.overlay {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 16px;
-  background: color-mix(in srgb, var(--bg) 78%, transparent);
-  backdrop-filter: blur(3px);
-  animation: fade-in 0.22s ease-out;
-}
-
-.overlay[hidden] {
-  display: none !important;
-}
-
-.overlay__card {
-  width: 100%;
-  max-width: 320px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 20px;
-  padding: 22px 20px;
+/* Says which of the three stores progress landed in, when it is not the
+   one that survives closing the game. */
+.status {
+  margin: 0 auto;
+  max-width: 52ch;
   text-align: center;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink-soft);
+  flex: none;
 }
+.status[hidden] { display: none; }
 
-.overlay__title {
-  margin: 0 0 6px;
-  font-size: 24px;
-  font-weight: 800;
-}
+/* ───────── buttons ───────── */
 
-.overlay__body {
-  margin: 0 0 18px;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-dim);
-}
-
-/* ---------- Buttons ---------- */
-
-.controls {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
-  flex: 0 0 auto;
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  flex: none;
 }
 
 .btn {
   appearance: none;
+  border: var(--stroke) solid var(--ink);
+  background: var(--paper);
+  color: var(--ink);
   font: inherit;
-  font-size: 15px;
+  font-family: "Baloo 2", "Nunito", sans-serif;
   font-weight: 700;
-  color: var(--text);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
+  font-size: 16px;
+  line-height: 1.1;
   /* 46px keeps every control above the ~44pt minimum touch target. */
   min-height: 46px;
-  padding: 0 14px;
+  padding: 11px 18px;
+  border-radius: 13px;
   cursor: pointer;
-  transition: transform 0.08s, background 0.15s, opacity 0.15s;
+  box-shadow: 0 var(--lift) 0 var(--ink);
+  transition: transform .09s ease, box-shadow .09s ease, background .14s ease;
+}
+.btn:hover:not(:disabled) { background: var(--paper-warm); }
+/* Press the button physically into the page. */
+.btn:active:not(:disabled) { transform: translateY(var(--lift)); box-shadow: 0 0 0 var(--ink); }
+.btn:disabled { opacity: .45; cursor: default; box-shadow: 0 var(--lift) 0 var(--ink-faint); }
+
+.btn--primary { background: var(--accent); color: #fff; }
+.btn--primary:hover:not(:disabled) { background: var(--accent-deep); }
+.btn--wide { width: 100%; }
+
+.btn[aria-pressed="true"] {
+  background: var(--gold);
 }
 
-.btn:active {
-  transform: scale(0.96);
-  background: var(--surface-hi);
+.btn:focus-visible,
+#board:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 3px;
 }
 
-.btn:disabled {
-  opacity: 0.38;
-  cursor: default;
-}
+/* ───────── overlays ───────── */
 
-.btn--primary {
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(43, 33, 66, .5);
+  display: grid;
+  place-items: center;
+  /* Keep the card off the notch, home indicator and rotated-side sensors. */
+  padding:
+    calc(20px + env(safe-area-inset-top))
+    calc(20px + env(safe-area-inset-right))
+    calc(20px + env(safe-area-inset-bottom))
+    calc(20px + env(safe-area-inset-left));
+  z-index: 30;
+  animation: fade .18s ease both;
+}
+.overlay[hidden] { display: none; }
+@keyframes fade { from { opacity: 0; } }
+
+.modal {
+  background: var(--paper);
+  border: var(--stroke) solid var(--ink);
+  border-radius: 22px;
+  padding: 28px;
+  max-width: 390px;
   width: 100%;
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #06222e;
+  /* Fit inside the overlay's content area and scroll if the copy is
+     taller than the phone, so the action button is always reachable. */
+  max-height: 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  text-align: center;
+  box-shadow: 0 8px 0 var(--ink);
+  animation: pop .34s cubic-bezier(.2, .9, .3, 1.5) both;
+}
+@keyframes pop { from { opacity: 0; transform: scale(.86) translateY(14px); } }
+
+.modal h2 {
+  margin: 0 0 6px;
+  font-family: "Baloo 2", sans-serif;
+  font-weight: 800;
+  font-size: 30px;
+  line-height: 1.05;
+}
+.modal__line {
+  color: var(--ink-soft);
+  font-size: 15px;
+  margin: 12px 0 0;
+}
+.modal__score {
+  font-family: "Baloo 2", sans-serif;
+  font-weight: 800;
+  font-size: 40px;
+  color: var(--ink);
+  margin: 10px 0 0;
+  font-variant-numeric: tabular-nums;
+}
+.modal__actions { margin: 20px 0 0; display: grid; gap: 10px; }
+
+/* ───────── short and narrow screens ───────── */
+
+/* Landscape phones: the chrome has to give way, not the board. */
+@media (orientation: landscape) and (max-height: 520px) {
+  .topbar { padding: 7px 12px; box-shadow: 0 4px 0 var(--ink); }
+  .topbar__title h2 { font-size: 18px; }
+  .stat b { font-size: 17px; }
+  .stat { min-width: 46px; padding: 3px 7px; }
+  .btn { min-height: 40px; padding: 8px 14px; font-size: 15px; }
+  /* The briefing is the one line worth losing to keep the board big. */
+  .brief { display: none; }
 }
 
-.btn[aria-pressed='true'] {
-  background: var(--surface-hi);
-  border-color: var(--accent);
-  color: var(--accent);
-}
-
-@keyframes fade-in {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
+@media (max-height: 620px) {
+  .brief { font-size: 14px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  * {
-    animation-duration: 0.01ms !important;
-    transition-duration: 0.01ms !important;
-  }
-}
-
-/* Landscape phones: HUD and controls side-by-side would cost too much
-   height, so shrink them instead. */
-@media (orientation: landscape) and (max-height: 520px) {
-  .hud__value {
-    font-size: 16px;
-  }
-  .btn {
-    min-height: 40px;
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
   }
 }

@@ -16,7 +16,7 @@ describe('levelConfig', () => {
     const far = levelConfig(500);
     expect(far.cols).toBeLessThanOrEqual(8);
     expect(far.rows).toBeLessThanOrEqual(11);
-    expect(far.colors).toBeLessThanOrEqual(6);
+    expect(far.colors).toBeLessThanOrEqual(7);
     expect(far.maxStamp).toBeLessThanOrEqual(7);
   });
 

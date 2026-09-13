@@ -15,8 +15,8 @@ export async function initNative(): Promise<void> {
   if (!isNative()) return;
 
   try {
-    // The app draws its own dark background under the status bar.
-    await StatusBar.setStyle({ style: Style.Dark });
+    // Style.Light means dark text, which is what a bright sky needs.
+    await StatusBar.setStyle({ style: Style.Light });
     if (Capacitor.getPlatform() === 'android') {
       await StatusBar.setOverlaysWebView({ overlay: true });
     }

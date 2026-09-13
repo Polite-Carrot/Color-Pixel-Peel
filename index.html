@@ -1,68 +1,117 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <meta charset="UTF-8" />
-    <!-- viewport-fit=cover lets the layout extend under the notch/home
-         indicator; the CSS then pads back with env(safe-area-inset-*). -->
+    <meta charset="utf-8" />
+    <!-- viewport-fit=cover lets the layout extend under the notch and home
+         indicator; the CSS pads back with env(safe-area-inset-*). Zoom is
+         off so a two-finger gesture or a double-tap on a tile cannot leave
+         the board halfway off the screen. -->
     <meta
       name="viewport"
-      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
     />
-    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
-    <meta name="theme-color" content="#0d1017" />
+    <meta name="theme-color" content="#79cbf2" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="description" content="Peel layers of colored pixels to clear the board." />
     <title>Color Pixel Peel</title>
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="./fonts.css" />
   </head>
   <body>
-    <div id="app">
-      <header class="hud">
-        <div class="hud__stat">
-          <span class="hud__label">Level</span>
-          <span class="hud__value" id="stat-level">1</span>
+    <!-- Polite Carrot startup lockup, shared with Color Match & Merge so the
+         two read as coming from the same place. Plain markup and a small
+         inline script rather than anything the game modules own, so it
+         paints before any of them have parsed. -->
+    <div id="boot" aria-hidden="true">
+      <div class="boot-lockup">
+        <img class="boot-mark" src="./assets/polite-carrot-logo.svg" alt="" />
+        <img class="boot-name" src="./assets/polite-carrot-name.svg" alt="" />
+      </div>
+    </div>
+
+    <div class="app">
+      <header class="topbar">
+        <div class="topbar__title">
+          <h2 id="level-name">Level 1</h2>
+          <span id="level-sub">4 × 5 · 3 colors</span>
         </div>
-        <div class="hud__stat">
-          <span class="hud__label">Score</span>
-          <span class="hud__value" id="stat-score">0</span>
-        </div>
-        <div class="hud__stat" id="stat-moves-wrap">
-          <span class="hud__label">Moves</span>
-          <span class="hud__value" id="stat-moves">0</span>
-        </div>
-        <div class="hud__stat">
-          <span class="hud__label">Best</span>
-          <span class="hud__value" id="stat-best">0</span>
+        <div class="topbar__stats">
+          <div class="stat" id="stat-moves-wrap">
+            <b id="stat-moves">0</b>
+            <small>Moves</small>
+          </div>
+          <div class="stat">
+            <b id="stat-score">0</b>
+            <small>Score</small>
+          </div>
+          <div class="stat">
+            <b id="stat-best">0</b>
+            <small>Best</small>
+          </div>
         </div>
       </header>
 
+      <p class="brief" id="brief">
+        Tap a run of two or more of the same color to peel it and reveal what is underneath.
+      </p>
+
       <main class="board">
         <canvas id="board" aria-label="Game board"></canvas>
-        <div class="overlay" id="overlay" hidden>
-          <div class="overlay__card">
-            <h2 class="overlay__title" id="overlay-title">Level clear</h2>
-            <p class="overlay__body" id="overlay-body"></p>
-            <button class="btn btn--primary" id="overlay-action" type="button">Next level</button>
-          </div>
-        </div>
       </main>
 
-      <nav class="controls">
-        <button class="btn" id="btn-undo" type="button" aria-label="Undo last peel">Undo</button>
-        <button class="btn" id="btn-restart" type="button" aria-label="Restart level">Restart</button>
+      <p class="status" id="save-warning" hidden></p>
+
+      <nav class="toolbar">
+        <button class="btn" id="btn-undo" type="button">Undo</button>
+        <button class="btn" id="btn-restart" type="button">Restart</button>
         <button
           class="btn"
-          id="btn-symbols"
+          id="btn-assist"
           type="button"
           aria-pressed="false"
-          aria-label="Toggle color symbols for colorblind accessibility"
+          title="Show a letter on every color"
         >
-          Symbols
+          Assist
         </button>
       </nav>
     </div>
 
+    <div class="overlay" id="overlay" hidden>
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="overlay-title">
+        <h2 class="modal__title" id="overlay-title">Level clear</h2>
+        <p class="modal__score" id="overlay-score"></p>
+        <p class="modal__line" id="overlay-body"></p>
+        <div class="modal__actions">
+          <button class="btn btn--primary btn--wide" id="overlay-action" type="button">Next level</button>
+          <button class="btn btn--wide" id="overlay-secondary" type="button" hidden>Undo last peel</button>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      /* Two guards against this becoming a black screen nobody can get
+         past: a hard timeout dismisses it whether `load` fired or not, and
+         the element is pointer-events: none throughout. */
+      (function () {
+        var boot = document.getElementById('boot');
+        if (!boot) return;
+
+        function dismissBoot() {
+          if (boot.classList.contains('done')) return;
+          boot.classList.add('done');
+          boot.addEventListener('transitionend', function () { boot.remove(); }, { once: true });
+          setTimeout(function () { if (boot.isConnected) boot.remove(); }, 700);
+        }
+
+        var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        window.addEventListener('load', function () {
+          setTimeout(dismissBoot, reduced ? 100 : 1350);
+        }, { once: true });
+        setTimeout(dismissBoot, 4000);
+      })();
+    </script>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
