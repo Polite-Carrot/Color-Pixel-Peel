@@ -5,84 +5,55 @@ A mobile puzzle game for iOS and Android, in the same visual world as
 [Vite](https://vite.dev), wrapped in native shells with
 [Capacitor](https://capacitorjs.com) so both stores ship from one codebase.
 
-## The mechanic
+## The game
 
-Every cell on the board is a **stack of colored pixel layers**. You only see
-the top one.
+Three parts, matching the reference:
 
-- **Tap a cell** and the 4-connected region sharing that top color *peels off*,
-  revealing whatever colors were underneath.
-- A region needs **at least 2 cells** to peel. Lone pixels are stuck.
-- Cells that run out of layers become **holes**, which break connectivity
-  between their neighbours — so the order you peel in changes what is
-  reachable later.
-- **Clear the whole board** before the move limit runs out.
+1. **The picture** — pixel art built from colored tiles, mounted on a card.
+2. **The panel** — a row of slots above the blocks, where a played block goes.
+3. **The blocks** — numbered color chips in a tray. A `12` on dark takes twelve
+   dark tiles off the picture.
 
-Scoring is quadratic in region size (`5 × n²`), so one big peel beats several
-small ones, plus a clear bonus that rewards unused moves.
+Play a block and it immediately takes as many tiles of its color as it can.
+Clear the whole picture and the level is done.
 
-## Levels
+### What "accessible" means
 
-**Level 1 is written by hand.** It exists to teach the rule, and that is not
-something a generator can be asked for — the same reason Color Match writes
-its first five by hand. Everything after it is dealt.
+A tile can only be taken when it can be reached from outside the artwork: it
+touches background on some side, or sits on the board's edge. So at the start
+only the picture's outline is available, and opening it up is what reaches the
+tiles behind. It is why the dog's muzzle, nose and ears cannot be taken first
+— they are walled in by the head.
 
-Hand-authored levels live in `core/taught.ts` as data only, written as ASCII
-layer grids so the file reads as a picture of the board rather than an array
-of indices:
+That is also what gives the panel a job. A block whose color has nothing
+showing still plays, but it **waits in its slot** for tiles to appear instead
+of taking any. Tie up every slot with blocks that cannot move and there is no
+way on — so the slot count is how many mistimed blocks a level lets you get
+away with.
 
-```
-layers: [
-  ['0000', '1111', '2222'],   // bottom layer
-  ['22..', '00..', '..00'],   // top layer; '.' is no layer here
-],
-solution: [4, 10, 0, 8, 4, 0],
-```
+One removal can expose tiles another slot was waiting on, so after every play
+the panel re-resolves until nothing more moves. A single block can cascade.
 
-The six moves have a deliberate shape. The first three are the smallest run
-the game allows, which is the rule being taught; clearing them tidies the
-board into three clean stripes that the last three sweep away four at a time.
-So the lesson pays itself off, and the level is gentler than the first dealt
-one on both counts — 12 cells against 20, 6 moves against 9.
+### Reachability is shown in the tray, not on the picture
 
-`level.ts` builds these and checks them exactly as it checks a dealt level:
-the stored solution is replayed through the real `peel`, so a level edited
-into an unplayable state fails loudly rather than reaching a player. The
-tests loop over the table, so adding a second authored level cannot skip any
-of those checks.
+A block whose color has nothing available is drawn hatched and desaturated,
+which is where the player looks to understand why nothing happened.
 
-`levelFor(n)` routes between the two. The dealt ladder is asked for its own
-first rung at the first dealt level rather than at level 1, so putting an
-authored level in front does not cost the difficulty curve a step: level 2 is
-the 4×5 board that used to be level 1.
+An earlier version marked it up on the picture instead — every reachable tile
+raised with an ink outline and a hard shadow. That worked on a board of five
+big blocks and destroyed this: a picture stops reading as a picture the moment
+each tile is drawn as a separate object. The artwork is now flat fills on a
+cool grey mount, and the mount is grey rather than white because `white` is a
+playable color and the dog's muzzle vanished against paper.
 
-## Every dealt level is provably solvable
+### Levels are balanced, and checked
 
-Random boards deadlock. Instead of generating a board and hoping, the generator
-builds each level **backwards**:
-
-1. Start from an empty board.
-2. Repeatedly stamp a small connected blob with a color chosen so that **no
-   neighbouring cell already shows that color** — making the blob a *maximal*
-   same-color region.
-3. Record the stamp order.
-
-Because each stamp is maximal at the moment it is placed, tapping it peels
-*exactly* that blob and nothing more. So replaying the stamps in reverse order
-peels every layer back off, and the reverse of the stamp order **is** a
-solution. `generateLevel` then runs that solution through the real `peel`
-function via `verifySolution` and throws rather than ship a dead level.
-
-**That length is not par, and is deliberately never called par.** In Color
-Match par means the fewest moves possible, proven by exhausting everything
-cheaper. Here it is only the solution the generator happened to build — a
-board may well be clearable in fewer. Claiming otherwise would need a search
-this game does not have, so the topbar shows the board's shape instead and the
-move limit is that solution's length plus ~35% slack. `Undo` is unlimited, so
-imperfect play is recoverable either way.
-
-Levels are keyed by a stable seed (`seedForLevel`), so level 7 is the same
-board for every player on every device.
+A level's blocks add up to its picture's tile counts **exactly** — nothing
+spare, nothing missing — so clearing the picture means spending every block.
+`levels.test.ts` checks that per color, checks no two colors in one picture sit
+closer than the distance rule allows, checks at least one color starts buried
+(or the panel would never teach anything), and plays each level through
+greedily to prove it can actually be won.
 
 ## The screens
 
@@ -134,6 +105,16 @@ that identity are taken from that repo rather than reinvented:
 | `src/style.css` | The design tokens verbatim — sky gradient, paper and ink, `--lift` / `--stroke` / `--radius` — and the component recipes built on them: 3px ink outlines, hard unblurred drop shadows, buttons that press into the page. |
 | `src/core/palette.ts` | The color hexes, their letter marks, and the luminance rule that picks dark or light ink for a mark. |
 
+The palette needed extending: pixel art wants an outline color and something
+earthy, and a palette built for jars of liquid has neither. `dark`, `tan` and
+`slate` are added from the house tokens so they stay in-family.
+
+That move made the ≥150 distance rule **per picture** rather than
+palette-wide, because `red` and `tan` sit 142 apart and both are worth
+keeping. This is how Color Match enforces it too — its generator applies the
+rule at deal time so a clashing pair cannot land on one shelf, rather than
+banning the colors outright.
+
 Two conventions came with it:
 
 - **Deliberately single-theme.** There are no `prefers-color-scheme` blocks: a
@@ -141,20 +122,11 @@ Two conventions came with it:
   including the ground, so the page holds whatever the host paints behind it.
 - **US spelling in anything a player reads** — *color*, never *colour*.
 
-### The palette, and the clash it avoids
+### The clash it still avoids
 
-Color Match requires any two colors on one board to sit at least **150** apart
-on the rough perceptual measure in its `js/colour.js`. That measure and the
-figure are both reused here, and `palette.test.ts` checks something slightly
-stronger: early levels use only the first few entries, so **every prefix** of
-the list has to clear 150, not just the list as a whole. The order is
-primaries-first — matching the three jars on Color Match's masthead — and the
-tightest prefix pair is blue/purple at 157.
-
-`teal` (#0ec3c6) is left out of the nine. It sits 103 from this list's cyan,
-which is the palette clash that game's README still records as open. Omitting
-it means no board here can deal the pair at all, rather than relying on a
-generator check to keep them apart.
+`teal` (#0ec3c6) is left out of the palette. It sits 103 from this list's
+cyan, which is the clash that game's README still records as open. Omitting it
+means no picture here can use the pair at all.
 
 ## Look
 
@@ -176,7 +148,7 @@ nothing.
 ```bash
 npm install
 npm run dev        # dev server (also exposes window.__peel for debugging)
-npm test           # 90 unit tests over the game core and hold timing
+npm test           # 60 unit tests over the game core and hold timing
 npm run typecheck
 npm run build      # typecheck + production bundle into dist/
 npm run preview    # serve the built bundle
@@ -291,18 +263,22 @@ anything near progress.
 
 ## Known gaps
 
-- The move limit is not a proven par — see above. A real par would need a
-  search over peel states, which this game does not have.
 - `npm audit` reports a moderate advisory in `uuid`, reached via
   `xcode` ← `@capacitor/cli`. It is a dev-only dependency used to generate the
   Xcode project and is not part of the shipped app; the only available fix is a
   breaking CLI downgrade.
-- Difficulty on early dealt levels is driven mostly by board size: full
-  coverage needs a certain number of stamps, so `targetMoves` only starts to
-  bind on later levels.
-- Only one authored level so far. The obvious next ones each teach a rule the
-  first cannot: that a lone pixel is stuck until it gains a neighbour, and
-  that a hole breaks up the runs around it so peel order matters.
+- **One level, one picture.** The dog is 16×13 and coarse; the reference's
+  artwork is far finer and there are many more of them.
+- **No power-ups.** The reference has four along the bottom — an extra slot, a
+  grab, and two others — and none exist here.
+- **No score target.** The reference shows badges on the picture (a `30` and a
+  `1000`) which look like goals or rewards; what they mean is still a guess, so
+  nothing implements them.
+- When more tiles of a color are reachable than a block asks for, it takes the
+  ones nearest the top-left. That is consistent and predictable but arbitrary —
+  if the player should be choosing, this is the rule to change.
+- The tray scrolls past two rows of blocks. Fine for fourteen; a picture with
+  forty blocks needs a different answer.
 - No sound. Color Match makes its blips with oscillators rather than audio
   files, which is the approach to copy when it is added.
 - Below 420px the topbar's back button drops the word "Menu" and keeps the

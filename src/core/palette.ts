@@ -20,9 +20,7 @@ export interface Swatch {
 
 /**
  * Ordered primaries-first, matching the three jars on Color Match's
- * masthead, and arranged so that **every prefix** of the list stays
- * mutually distinguishable — early levels use only the first few entries.
- * See {@link MIN_DISTANCE}; `palette.test.ts` checks every prefix.
+ * masthead.
  *
  * `teal` (#0ec3c6) from the shared palette is deliberately left out. It
  * sits 103 from this list's cyan, below the 150 rule — the palette clash
@@ -39,14 +37,42 @@ export const PALETTE: readonly Swatch[] = [
   { hex: '#ff8700', mark: 'O', name: 'orange' },
   { hex: '#ff5aae', mark: 'M', name: 'magenta' },
   { hex: '#fbfdff', mark: 'W', name: 'white' },
+
+  /* Darks and neutrals the liquid palette has none of, borrowed from the
+     house tokens so they stay in-family. Pixel art needs an outline color
+     and something earthy; a jar of liquid never did. */
+  { hex: '#2b2142', mark: 'D', name: 'dark' },
+  { hex: '#a86f36', mark: 'T', name: 'tan' },
+  { hex: '#8e9bb3', mark: 'S', name: 'slate' },
 ];
 
 export const MAX_COLORS = PALETTE.length;
 
+/* Named ids, so a picture's legend and a level's blocks read as colors
+   rather than as numbers. The order below is the order above. */
+export const RED: ColorId = 0;
+export const BLUE: ColorId = 1;
+export const YELLOW: ColorId = 2;
+export const GREEN: ColorId = 3;
+export const PURPLE: ColorId = 4;
+export const CYAN: ColorId = 5;
+export const ORANGE: ColorId = 6;
+export const MAGENTA: ColorId = 7;
+export const WHITE: ColorId = 8;
+export const DARK: ColorId = 9;
+export const TAN: ColorId = 10;
+export const SLATE: ColorId = 11;
+
 /**
- * How far apart two colors must look before they may share a board. The
- * figure and the measure below both come from Color Match, so a pair
- * rejected there is rejected here.
+ * How far apart two colors must look before they may share **one
+ * picture**. The figure and the measure below both come from Color Match.
+ *
+ * Per-picture rather than palette-wide, which is how that game enforces
+ * it too — its generator applies the rule at deal time so a clashing pair
+ * cannot land on one shelf, rather than banning the colors outright. That
+ * matters more here: `red` and `tan` sit 142 apart, and losing either from
+ * the whole palette would cost more than keeping them off the same
+ * artwork. `levels.test.ts` checks every picture.
  */
 export const MIN_DISTANCE = 150;
 
@@ -77,6 +103,17 @@ export function distance(a: ColorId, b: ColorId): number {
   const dg = x.g - y.g;
   const db = x.b - y.b;
   return Math.sqrt(2 * dr * dr + 4 * dg * dg + 3 * db * db);
+}
+
+/**
+ * Solid dark or light ink for text sitting ON a color — a block's number,
+ * say. The translucent {@link markInk} is right over artwork, where the
+ * tile's color should still read through; a number on a chip needs full
+ * contrast or it comes out grey.
+ */
+export function solidInk(id: ColorId): string {
+  const c = rgb(id);
+  return (0.299 * c.r + 0.587 * c.g + 0.114 * c.b) / 255 > 0.58 ? '#2b2142' : '#fffdf7';
 }
 
 /** Dark or light ink for a mark sitting on the tile, by its luminance. */

@@ -665,3 +665,114 @@ body {
   .masthead__tag { font-size: 15px; margin-top: 12px; }
   .masthead { margin-bottom: 16px; }
 }
+
+/* ───────── the panel and the tray ───────── */
+
+.panel {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  flex: none;
+}
+
+/* An empty slot is drawn as an opening rather than a card: dashed, sunk
+   into the sky, so a filled one reads as something resting in it. */
+.slot {
+  width: 44px;
+  height: 44px;
+  border: 2px dashed rgba(43, 33, 66, .38);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, .22);
+  display: grid;
+  place-items: center;
+}
+.slot.is-filled {
+  border-style: solid;
+  border-color: var(--ink);
+  background: var(--paper);
+}
+
+.tray {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 7px;
+  flex: none;
+  /* Two rows of blocks at most on a phone; more than that and the
+     picture starts paying for the tray. */
+  max-height: 104px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* A numbered color block. The number is the whole point, so it is the
+   biggest thing on it. */
+.chip {
+  appearance: none;
+  position: relative;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: var(--stroke) solid var(--ink);
+  border-radius: 12px;
+  box-shadow: 0 var(--lift) 0 var(--ink);
+  font: inherit;
+  font-family: "Baloo 2", sans-serif;
+  font-weight: 800;
+  font-size: 21px;
+  line-height: 1;
+  cursor: pointer;
+  transition: transform .09s ease, box-shadow .09s ease;
+}
+.chip:active:not(:disabled) { transform: translateY(var(--lift)); box-shadow: 0 0 0 var(--ink); }
+.chip:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+
+/* A block whose color has nothing showing would strand in a slot. Said
+   with a slashed, desaturated look rather than by fading the whole chip
+   away: playing it is a legal move and sometimes the right one, so the
+   game says "this will wait" rather than "you cannot". */
+.chip.is-stranded {
+  filter: saturate(.45);
+  opacity: .78;
+}
+.chip.is-stranded::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 9px;
+  background: repeating-linear-gradient(
+    -45deg,
+    rgba(43, 33, 66, .16) 0 3px,
+    transparent 3px 7px
+  );
+}
+
+.chip--slot {
+  width: 100%;
+  height: 100%;
+  box-shadow: none;
+  border-width: 2px;
+  cursor: default;
+  font-size: 18px;
+}
+
+/* Sits on a slot's block to say how many tiles it is still owed. */
+.chip__owed {
+  position: absolute;
+  right: -5px;
+  bottom: -6px;
+  min-width: 19px;
+  padding: 0 3px;
+  border: 2px solid var(--ink);
+  border-radius: 9px;
+  background: var(--gold);
+  color: var(--ink);
+  font-size: 12px;
+  line-height: 15px;
+}
+
+@media (max-height: 700px) {
+  .slot { width: 40px; height: 40px; }
+  .chip { width: 40px; height: 40px; font-size: 19px; }
+  .tray { max-height: 92px; }
+}

@@ -70,13 +70,13 @@
             <span aria-hidden="true">&larr;</span><span class="topbar__back-text">&nbsp;Menu</span>
           </button>
           <div class="topbar__title">
-            <h2 id="level-name">Level 1</h2>
-            <span id="level-sub">4 × 5 · 3 colors</span>
+            <h2 id="level-name">Good dog</h2>
+            <span id="level-sub">Level 1</span>
           </div>
           <div class="topbar__stats">
-            <div class="stat" id="stat-moves-wrap">
-              <b id="stat-moves">0</b>
-              <small>Moves</small>
+            <div class="stat" id="stat-tiles-wrap">
+              <b id="stat-tiles">0</b>
+              <small>Tiles</small>
             </div>
             <div class="stat">
               <b id="stat-score">0</b>
@@ -90,8 +90,15 @@
         </p>
 
         <main class="board">
-          <canvas id="board" aria-label="Game board"></canvas>
+          <canvas id="board" aria-label="The picture"></canvas>
         </main>
+
+        <!-- Where a played block goes. A block that cannot be fully spent
+             waits here, tying the slot up until the picture opens. -->
+        <div class="panel" id="panel" aria-label="Panel"></div>
+
+        <!-- The numbered color blocks still to play. -->
+        <div class="tray" id="tray" aria-label="Blocks"></div>
 
         <nav class="toolbar">
           <button class="btn" id="btn-undo" type="button">Undo</button>

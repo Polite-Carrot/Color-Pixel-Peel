@@ -1,6 +1,9 @@
 import './style.css';
 
 import { Game } from './core/game';
+import { tileAt } from './core/board';
+import { LEVEL_COUNT } from './core/levels';
+import type { ColorId } from './core/palette';
 import {
   DEFAULT_PROGRESS,
   loadProgress,
@@ -14,6 +17,7 @@ import {
 import { attachPointer } from './input/pointer';
 import { Renderer } from './render/renderer';
 import { Hud } from './ui/hud';
+import { Tray } from './ui/tray';
 import * as modal from './ui/modal';
 import { Screens } from './ui/screens';
 import { Settings } from './ui/settings';
@@ -45,31 +49,29 @@ function boot(): void {
   const howtoClose = required<HTMLButtonElement>('howto-close');
   const briefEl = required('brief');
 
-  /* Hand-authored levels carry their own briefing — the rule they exist to
-     teach. Dealt levels have nothing particular to say, so they fall back
-     to the standing one. */
-  const GENERIC_BRIEF =
-    'Tap a run of two or more of the same color to peel it and reveal what is underneath.';
+  /* Every level is authored, so each carries its own briefing. */
+
+  const tray = new Tray((i) => playBlock(i));
 
   let assist = progress.assist;
-  let pressed: number | null = null;
+  let highlight: ColorId | null = null;
   let frame = 0;
   let overlayTimer: number | undefined;
 
-  const syncBrief = (): void => {
-    briefEl.textContent = game.level.brief ?? GENERIC_BRIEF;
-  };
-
   const syncHud = (): void => {
-    syncBrief();
+    briefEl.textContent = game.level.brief;
     hud.update({
       level: game.levelIndex,
+      name: game.level.name,
       score: game.score,
-      movesLeft: game.movesLeft,
+      tilesLeft: game.tilesLeft,
       canUndo: game.canUndo,
-      cols: game.board.cols,
-      rows: game.board.rows,
-      colors: game.level.config.colors,
+    });
+    tray.render({
+      tray: game.tray,
+      slots: game.slots,
+      reachable: (b) => game.reachable(b.color),
+      playable: game.status === 'playing',
     });
   };
 
@@ -79,7 +81,7 @@ function boot(): void {
 
   const draw = (): void => {
     frame = 0;
-    renderer.draw({ assist, pressed });
+    renderer.draw({ assist, highlight });
     // Keep animating only while something is moving — a phone should not
     // burn battery on a static board.
     if (renderer.busy) requestFrame();
@@ -132,7 +134,7 @@ function boot(): void {
     if (game.status === 'won') {
       progress = {
         ...progress,
-        unlockedLevel: Math.max(progress.unlockedLevel, game.levelIndex + 1),
+        unlockedLevel: Math.max(progress.unlockedLevel, Math.min(game.levelIndex + 1, LEVEL_COUNT)),
         bestScore: Math.max(progress.bestScore, game.score),
       };
       saveProgress(progress);
@@ -140,12 +142,16 @@ function boot(): void {
 
       hud.showOverlay(
         {
-          title: 'Level clear',
-          score: `+${game.levelScore.toLocaleString()}`,
-          body: `Cleared with ${game.movesLeft} move${game.movesLeft === 1 ? '' : 's'} to spare.`,
-          actionLabel: 'Next level',
+          title: 'Picture clear',
+          score: game.score.toLocaleString(),
+          body: `${game.level.name} — every tile taken.`,
+          actionLabel: game.isLastLevel ? 'Back to menu' : 'Next level',
         },
         () => {
+          if (game.isLastLevel) {
+            goHome();
+            return;
+          }
           game.nextLevel();
           refreshBoard();
           resize();
@@ -158,16 +164,13 @@ function boot(): void {
     saveProgress(progress);
     syncHome();
 
-    const stranded = game.lossReason === 'no-moves';
     hud.showOverlay(
       {
-        title: stranded ? 'No way on from here' : 'Out of moves',
-        body: stranded
-          ? 'Every run left is a single pixel. Step back a peel, or start the level again.'
-          : 'The move limit ran out before the board was clear.',
-        actionLabel: 'Restart level',
+        title: 'No way on from here',
+        body: 'Every slot is holding a block with nothing to take. Step back a play, or start the picture again.',
+        actionLabel: 'Restart picture',
         // Undo can only help if there is something to step back to.
-        ...(game.canUndo ? { secondaryLabel: 'Undo last peel' } : {}),
+        ...(game.canUndo ? { secondaryLabel: 'Undo last play' } : {}),
       },
       () => {
         game.restart();
@@ -185,18 +188,18 @@ function boot(): void {
     );
   };
 
-  const handleTap = (cell: number): void => {
-    const outcome = game.tap(cell);
+  const playBlock = (trayIndex: number): void => {
+    const outcome = game.place(trayIndex);
 
     if (outcome.kind === 'ignored') {
       rejectFeedback();
       return;
     }
 
-    // Animate the old layer lifting away, on top of the new board state.
     renderer.setBoard(game.board);
-    renderer.addPeel(outcome.peeled, outcome.color);
-    peelFeedback(outcome.peeled.length);
+    renderer.addTake(outcome.taken, outcome.block.color);
+    if (outcome.taken.length > 0) peelFeedback(outcome.taken.length);
+    else rejectFeedback(); // it stranded in a slot, which is worth feeling
     syncHud();
     requestFrame();
 
@@ -228,16 +231,17 @@ function boot(): void {
     },
   });
 
+  /* The picture is not where moves are made — blocks are. Tapping it
+     instead picks out one color, dimming the rest, which is how a player
+     finds where a color actually is before spending a block on it. */
   attachPointer(canvas, (x, y) => renderer.hitTest(x, y), {
-    onPress: (cell) => {
-      pressed = cell;
+    onPress: () => {},
+    onTap: (cell) => {
+      const color = tileAt(game.board, cell);
+      highlight = color === highlight ? null : color;
       requestFrame();
     },
-    onTap: handleTap,
-    onCancel: () => {
-      pressed = null;
-      requestFrame();
-    },
+    onCancel: () => {},
   });
 
   screens.playButton.addEventListener('click', () => {
@@ -308,7 +312,7 @@ function boot(): void {
       get game() {
         return game;
       },
-      solution: () => [...game.level.solution],
+      place: (i: number) => playBlock(i),
       cellRect: (cell: number) => renderer.cellRect(cell),
       canvasOrigin: () => canvas.getBoundingClientRect(),
     };

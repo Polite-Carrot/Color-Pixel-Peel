@@ -1,227 +1,244 @@
 import { describe, expect, it } from 'vitest';
-import { Game, clearBonus, regionScore } from './game';
-import { isCleared } from './board';
-import { type Level, levelConfig } from './level';
-import { boardFromLayers } from './authoring';
+import { CLEAR_BONUS, Game, TILE_SCORE } from './game';
+import { isCleared, remainingOf } from './board';
+import { block } from './blocks';
+import { LEVELS, type LevelDef } from './levels';
+import { BLUE, RED } from './palette';
 
-/** Wraps a hand-made board as a Level so loss paths can be forced. */
-function levelOf(layers: readonly (readonly string[])[], moveLimit: number): Level {
+/** A hand-made level, so the rules can be pinned without the real artwork. */
+function levelOf(over: Partial<LevelDef>): LevelDef {
   return {
-    index: 1,
-    seed: 0,
-    config: levelConfig(1),
-    board: boardFromLayers(layers),
-    solution: [],
-    moveLimit,
+    name: 'test',
+    brief: 'test',
+    picture: { rows: ['RR'], legend: { R: RED, B: BLUE } },
+    slots: 2,
+    blocks: [block(RED, 2)],
+    ...over,
   };
 }
 
-/** One 2-cell region, clearable in a single move. */
-const oneMoveWin = (): Level => levelOf([['00']], 3);
+function gameOf(def: LevelDef): Game {
+  const game = new Game(1);
+  // Drive the game from a hand-made level by replacing its definition.
+  (game as unknown as { _def: LevelDef })._def = def;
+  game.restart();
+  return game;
+}
 
-/** Two layers deep but only one move allowed. */
-const outOfMoves = (): Level => levelOf([['00'], ['11']], 1);
+describe('placing a block', () => {
+  it('takes that many tiles of its color', () => {
+    const game = gameOf(levelOf({ picture: { rows: ['RRRR'], legend: { R: RED } }, blocks: [block(RED, 3)] }));
+    const outcome = game.place(0);
 
-/**
- * Tops are 1,1,2,0 — one legal move, after which the remaining tops
- * (0,1,2,0) are all isolated singles.
- */
-const deadEnd = (): Level => levelOf([['0120'], ['11..']], 5);
-
-describe('scoring', () => {
-  it('rewards bigger regions superlinearly', () => {
-    expect(regionScore(2)).toBe(20);
-    expect(regionScore(4)).toBe(80);
-    // Two 2-cell peels are worth far less than one 4-cell peel.
-    expect(regionScore(2) * 2).toBeLessThan(regionScore(4));
+    expect(outcome.kind).toBe('placed');
+    if (outcome.kind !== 'placed') throw new Error('expected a placement');
+    expect(outcome.taken).toHaveLength(3);
+    expect(outcome.points).toBe(3 * TILE_SCORE);
+    expect(remainingOf(game.board, RED)).toBe(1);
+    expect(game.tray).toHaveLength(0);
   });
 
-  it('pays a clear bonus that grows with unused moves', () => {
-    expect(clearBonus(0)).toBe(250);
-    expect(clearBonus(3)).toBeGreaterThan(clearBonus(0));
+  it('frees its slot again once fully spent', () => {
+    const game = gameOf(levelOf({ picture: { rows: ['RRRR'], legend: { R: RED } }, blocks: [block(RED, 2)] }));
+    game.place(0);
+    expect(game.slots.every((s) => s.block === null)).toBe(true);
+  });
+
+  it('waits in its slot when it cannot be fully spent', () => {
+    // Only the border reds are reachable; the two inside are walled in.
+    const game = gameOf(
+      levelOf({
+        picture: { rows: ['BBBB', 'BRRB', 'BBBB'], legend: { R: RED, B: BLUE } },
+        blocks: [block(RED, 2)],
+        slots: 2,
+      }),
+    );
+    const outcome = game.place(0);
+    if (outcome.kind !== 'placed') throw new Error('expected a placement');
+
+    expect(outcome.taken).toHaveLength(0);
+    expect(outcome.pending).toBe(true);
+    expect(game.slots[0]?.block).not.toBeNull();
+    expect(game.slots[0]?.remaining).toBe(2);
+  });
+
+  it('takes what it can and waits for the rest', () => {
+    // One red reachable on the edge, one buried behind blues.
+    const game = gameOf(
+      levelOf({
+        picture: { rows: ['RBBB', 'BBRB', 'BBBB'], legend: { R: RED, B: BLUE } },
+        blocks: [block(RED, 2)],
+      }),
+    );
+    const outcome = game.place(0);
+    if (outcome.kind !== 'placed') throw new Error('expected a placement');
+
+    expect(outcome.taken).toHaveLength(1);
+    expect(outcome.pending).toBe(true);
+    expect(game.slots[0]?.remaining).toBe(1);
+  });
+
+  it('is stuck, not merely slot-less, once the last slot fills', () => {
+    /* Filling the last slot IS the stuck condition: the cascade has
+       already let every slot take what it could, so a slot still holding
+       a block is one with nothing available. There is therefore no state
+       where the slots are full and the game is still playable, and the
+       refusal a further play gets is 'finished' rather than
+       'no-free-slot'. */
+    const game = gameOf(
+      levelOf({
+        picture: { rows: ['BBBB', 'BRRB', 'BBBB'], legend: { R: RED, B: BLUE } },
+        blocks: [block(RED, 1), block(RED, 1), block(RED, 1)],
+        slots: 2,
+      }),
+    );
+    game.place(0);
+    game.place(0);
+    expect(game.slots.every((s) => s.block !== null)).toBe(true);
+    expect(game.status).toBe('stuck');
+    expect(game.place(0)).toEqual({ kind: 'ignored', reason: 'finished' });
+  });
+
+  it('refuses a block that is not there', () => {
+    const game = gameOf(levelOf({}));
+    expect(game.place(9)).toEqual({ kind: 'ignored', reason: 'no-such-block' });
   });
 });
 
-describe('Game taps', () => {
-  it('ignores a tap on a single-cell region without spending a move', () => {
-    const game = new Game(levelOf([['01']], 5));
-    expect(game.tap(0)).toEqual({ kind: 'ignored' });
-    expect(game.movesUsed).toBe(0);
-    expect(game.score).toBe(0);
-    expect(game.canUndo).toBe(false);
-  });
+describe('the cascade', () => {
+  it('lets a waiting block finish once the picture opens up', () => {
+    /* Red is buried behind blue. Playing red first strands it in a slot;
+       playing blue then opens the reds, and the waiting red block takes
+       them without being played again. */
+    const game = gameOf(
+      levelOf({
+        picture: { rows: ['BBBB', 'BRRB', 'BBBB'], legend: { R: RED, B: BLUE } },
+        blocks: [block(RED, 2), block(BLUE, 10)],
+        slots: 2,
+      }),
+    );
 
-  it('scores a legal peel and spends one move', () => {
-    const game = new Game(levelOf([['000']], 5));
-    const outcome = game.tap(0);
-    expect(outcome.kind).toBe('peeled');
-    if (outcome.kind !== 'peeled') throw new Error('expected a peel');
-    expect(outcome.peeled).toHaveLength(3);
-    expect(outcome.points).toBe(regionScore(3));
-    expect(game.movesUsed).toBe(1);
-    expect(game.movesLeft).toBe(4);
-  });
+    const first = game.place(0);
+    if (first.kind !== 'placed') throw new Error('expected a placement');
+    expect(first.taken).toHaveLength(0);
+    expect(first.pending).toBe(true);
 
-  it('carries a starting score forward', () => {
-    const game = new Game(levelOf([['00']], 5), 1000);
-    expect(game.score).toBe(1000);
-    game.tap(0);
-    expect(game.score).toBe(1000 + regionScore(2) + clearBonus(4));
-  });
+    const second = game.place(0); // the blue block, now at index 0
+    if (second.kind !== 'placed') throw new Error('expected a placement');
 
-  it('ignores taps once the level has ended', () => {
-    const game = new Game(oneMoveWin());
-    game.tap(0);
-    expect(game.status).toBe('won');
-    expect(game.tap(0)).toEqual({ kind: 'ignored' });
-    expect(game.movesUsed).toBe(1);
-  });
-});
-
-describe('Game outcomes', () => {
-  it('wins when the last layer comes off, with a bonus', () => {
-    const game = new Game(oneMoveWin());
-    const outcome = game.tap(0);
-    if (outcome.kind !== 'peeled') throw new Error('expected a peel');
-
-    expect(outcome.status).toBe('won');
-    expect(outcome.bonus).toBe(clearBonus(2));
-    expect(game.status).toBe('won');
+    // The blues went, and the reds they were hiding went with them.
+    expect(remainingOf(game.board, RED)).toBe(0);
+    expect(game.slots.every((s) => s.block === null)).toBe(true);
     expect(isCleared(game.board)).toBe(true);
-    expect(game.levelScore).toBe(regionScore(2) + clearBonus(2));
-  });
-
-  it('loses when the move limit runs out mid-board', () => {
-    const game = new Game(outOfMoves());
-    const outcome = game.tap(0);
-    if (outcome.kind !== 'peeled') throw new Error('expected a peel');
-
-    expect(outcome.status).toBe('lost');
-    expect(game.lossReason).toBe('out-of-moves');
-    expect(game.movesLeft).toBe(0);
-    expect(isCleared(game.board)).toBe(false);
-  });
-
-  it('loses when only single-cell regions remain', () => {
-    const game = new Game(deadEnd());
-    const outcome = game.tap(0);
-    if (outcome.kind !== 'peeled') throw new Error('expected a peel');
-
-    expect(outcome.status).toBe('lost');
-    expect(game.lossReason).toBe('no-moves');
-    // Still had moves in the bank — it was the board that dried up.
-    expect(game.movesLeft).toBeGreaterThan(0);
-  });
-
-  it('prefers a win over the move limit when the last move clears', () => {
-    // Exactly one move allowed, and that move clears the board.
-    const game = new Game(levelOf([['00']], 1));
-    game.tap(0);
-    expect(game.status).toBe('won');
-    expect(game.movesLeft).toBe(0);
+    expect(second.status).toBe('won');
   });
 });
 
-describe('Game undo', () => {
-  it('restores board, moves and score', () => {
-    const game = new Game(levelOf([['000'], ['111']], 5));
-    const before = { board: game.board, score: game.score };
+describe('finishing a level', () => {
+  it('wins when the picture is clear, with a bonus', () => {
+    const game = gameOf(levelOf({ picture: { rows: ['RR'], legend: { R: RED } }, blocks: [block(RED, 2)] }));
+    const outcome = game.place(0);
+    if (outcome.kind !== 'placed') throw new Error('expected a placement');
 
-    game.tap(0);
-    expect(game.movesUsed).toBe(1);
+    expect(game.status).toBe('won');
+    expect(outcome.points).toBe(2 * TILE_SCORE + CLEAR_BONUS);
+    expect(game.score).toBe(2 * TILE_SCORE + CLEAR_BONUS);
+  });
+
+  it('ignores further plays once finished', () => {
+    const game = gameOf(
+      levelOf({ picture: { rows: ['RR'], legend: { R: RED } }, blocks: [block(RED, 2), block(RED, 1)] }),
+    );
+    game.place(0);
+    expect(game.place(0)).toEqual({ kind: 'ignored', reason: 'finished' });
+  });
+
+  it('is stuck when every slot is tied up with nothing to take', () => {
+    const game = gameOf(
+      levelOf({
+        picture: { rows: ['BBBB', 'BRRB', 'BBBB'], legend: { R: RED, B: BLUE } },
+        blocks: [block(RED, 1), block(RED, 1)],
+        slots: 2,
+      }),
+    );
+    game.place(0);
+    const last = game.place(0);
+    if (last.kind !== 'placed') throw new Error('expected a placement');
+    expect(last.status).toBe('stuck');
+    expect(game.status).toBe('stuck');
+  });
+
+  it('is stuck when the tray is empty and nothing can move', () => {
+    const game = gameOf(
+      levelOf({
+        picture: { rows: ['RRRR'], legend: { R: RED } },
+        blocks: [block(RED, 1)],
+        slots: 3,
+      }),
+    );
+    const outcome = game.place(0);
+    if (outcome.kind !== 'placed') throw new Error('expected a placement');
+    expect(outcome.status).toBe('stuck');
+  });
+});
+
+describe('undo and restart', () => {
+  it('undo puts the picture, tray, slots and score back', () => {
+    const game = gameOf(levelOf({ picture: { rows: ['RRRR'], legend: { R: RED } }, blocks: [block(RED, 2)] }));
+    const before = { board: game.board, score: game.score, tray: game.tray.length };
+
+    game.place(0);
     expect(game.score).toBeGreaterThan(before.score);
 
     expect(game.undo()).toBe(true);
     expect(game.board).toBe(before.board);
     expect(game.score).toBe(before.score);
-    expect(game.movesUsed).toBe(0);
+    expect(game.tray).toHaveLength(before.tray);
     expect(game.canUndo).toBe(false);
   });
 
-  it('rescues the player from a lost board', () => {
-    const game = new Game(deadEnd());
-    game.tap(0);
-    expect(game.status).toBe('lost');
-
+  it('undo rescues a stuck board', () => {
+    const game = gameOf(
+      levelOf({
+        picture: { rows: ['BBBB', 'BRRB', 'BBBB'], legend: { R: RED, B: BLUE } },
+        blocks: [block(RED, 1), block(RED, 1)],
+        slots: 2,
+      }),
+    );
+    game.place(0);
+    game.place(0);
+    expect(game.status).toBe('stuck');
     expect(game.undo()).toBe(true);
     expect(game.status).toBe('playing');
-    expect(game.lossReason).toBeUndefined();
   });
 
-  it('reports nothing to undo on a fresh level', () => {
-    const game = new Game(oneMoveWin());
-    expect(game.undo()).toBe(false);
+  it('has nothing to undo on a fresh level', () => {
+    expect(gameOf(levelOf({})).undo()).toBe(false);
   });
 
-  it('steps back through several peels', () => {
-    const game = new Game(levelOf([['00'], ['11'], ['22']], 9));
-    game.tap(0);
-    game.tap(0);
-    expect(game.movesUsed).toBe(2);
-    game.undo();
-    game.undo();
-    expect(game.movesUsed).toBe(0);
-    expect(game.score).toBe(0);
-    expect(game.undo()).toBe(false);
+  it('restart puts everything back', () => {
+    const game = gameOf(levelOf({ picture: { rows: ['RRRR'], legend: { R: RED } }, blocks: [block(RED, 2)] }));
+    game.place(0);
+    game.restart();
+    expect(game.tray).toHaveLength(1);
+    expect(game.tilesLeft).toBe(4);
+    expect(game.status).toBe('playing');
+    expect(game.canUndo).toBe(false);
   });
 });
 
-describe('Game level lifecycle', () => {
-  it('restart refunds the score earned in the level', () => {
-    const game = new Game(levelOf([['000'], ['111']], 5), 500);
-    game.tap(0);
-    expect(game.score).toBeGreaterThan(500);
-
-    game.restart();
-    expect(game.score).toBe(500);
-    expect(game.levelScore).toBe(0);
-    expect(game.movesUsed).toBe(0);
-    expect(game.status).toBe('playing');
-    expect(game.canUndo).toBe(false);
-  });
-
-  it('restart recovers a lost level', () => {
-    const game = new Game(outOfMoves());
-    game.tap(0);
-    expect(game.status).toBe('lost');
-    game.restart();
-    expect(game.status).toBe('playing');
-    expect(game.movesLeft).toBe(1);
-  });
-
-  it('advances to the next level only after a win, keeping the score', () => {
-    const game = new Game(oneMoveWin());
-
-    game.nextLevel();
-    expect(game.levelIndex).toBe(1); // refused while still playing
-
-    game.tap(0);
-    const earned = game.score;
-    game.nextLevel();
-
-    expect(game.levelIndex).toBe(2);
-    expect(game.status).toBe('playing');
-    expect(game.movesUsed).toBe(0);
-    expect(game.levelScore).toBe(0);
-    expect(game.score).toBe(earned);
-    expect(isCleared(game.board)).toBe(false);
-  });
-
-  it('generates a real playable board when advancing', () => {
-    const game = new Game(oneMoveWin());
-    game.tap(0);
-    game.nextLevel();
-    expect(game.level.solution.length).toBeGreaterThan(0);
-    expect(game.movesLeft).toBe(game.level.moveLimit);
-  });
-
-  it('plays a generated level to completion with its own solution', () => {
+describe('the real levels', () => {
+  it('starts on level 1 with its own hand and slots', () => {
     const game = new Game(1);
-    for (const move of game.level.solution) {
-      const outcome = game.tap(move);
-      expect(outcome.kind).toBe('peeled');
-    }
-    expect(game.status).toBe('won');
-    expect(isCleared(game.board)).toBe(true);
+    const def = LEVELS[0] as LevelDef;
+    expect(game.level.name).toBe(def.name);
+    expect(game.tray).toHaveLength(def.blocks.length);
+    expect(game.slots).toHaveLength(def.slots);
+    expect(game.tilesLeft).toBeGreaterThan(0);
+  });
+
+  it('clamps a level number past the end', () => {
+    expect(new Game(99).levelIndex).toBe(LEVELS.length);
+    expect(new Game(0).levelIndex).toBe(1);
   });
 });

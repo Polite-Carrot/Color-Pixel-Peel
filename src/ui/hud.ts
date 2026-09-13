@@ -6,13 +6,12 @@ function required<T extends HTMLElement>(id: string): T {
 
 export interface HudModel {
   level: number;
+  /** The picture's name, shown as the title. */
+  name: string;
   score: number;
-  movesLeft: number;
+  /** Tiles still on the picture. */
+  tilesLeft: number;
   canUndo: boolean;
-  /** Board shape, shown as the subtitle. */
-  cols: number;
-  rows: number;
-  colors: number;
 }
 
 export interface OverlayModel {
@@ -25,15 +24,15 @@ export interface OverlayModel {
   secondaryLabel?: string;
 }
 
-/** The last few moves are worth flagging before they run out. */
-const LOW_MOVES = 3;
+/** Few enough tiles left that the end is in sight. */
+const NEARLY_DONE = 10;
 
 export class Hud {
   private readonly levelName = required('level-name');
   private readonly levelSub = required('level-sub');
   private readonly score = required('stat-score');
-  private readonly moves = required('stat-moves');
-  private readonly movesWrap = required('stat-moves-wrap');
+  private readonly tiles = required('stat-tiles');
+  private readonly tilesWrap = required('stat-tiles-wrap');
 
   private readonly overlay = required('overlay');
   private readonly overlayTitle = required('overlay-title');
@@ -49,17 +48,13 @@ export class Hud {
   readonly overlayMenuButton = required<HTMLButtonElement>('overlay-menu');
 
   update(model: HudModel): void {
-    this.levelName.textContent = `Level ${model.level}`;
-    /* Deliberately the board's shape rather than a move target. The moves
-       chip already carries what is left, and the generated solution length
-       is *a* solution rather than a proven minimum — so it is never called
-       par here, which in Color Match means the fewest moves possible. */
-    this.levelSub.textContent =
-      `${model.cols} × ${model.rows} · ${model.colors} color${model.colors === 1 ? '' : 's'}`;
+    this.levelName.textContent = model.name;
+    this.levelSub.textContent = `Level ${model.level}`;
     this.score.textContent = model.score.toLocaleString();
-    this.moves.textContent = String(model.movesLeft);
+    this.tiles.textContent = String(model.tilesLeft);
     this.undoButton.disabled = !model.canUndo;
-    this.movesWrap.classList.toggle('is-low', model.movesLeft <= LOW_MOVES);
+    // Nearly finished is worth flagging as encouragement.
+    this.tilesWrap.classList.toggle('is-low', model.tilesLeft > 0 && model.tilesLeft <= NEARLY_DONE);
   }
 
   showOverlay(model: OverlayModel, onAction: () => void, onSecondary?: () => void): void {

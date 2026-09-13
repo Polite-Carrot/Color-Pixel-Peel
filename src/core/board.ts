@@ -1,20 +1,21 @@
 import type { ColorId } from './palette';
+import { type PictureSource, parsePicture } from './picture';
 
 /**
- * A board is a grid of cells, and every cell is a *stack* of color
- * layers. `stack[stack.length - 1]` is the top layer — the color the
- * player sees. An empty stack is a hole: it shows the background and
- * breaks connectivity between its neighbours.
+ * The picture as the player works on it: a flat grid of tiles, one color
+ * each. `null` is background — either never part of the artwork, or
+ * already cleared.
+ *
+ * There are no layer stacks. The artwork has to stay readable, and
+ * anything stacked on top of it would hide the thing the player is
+ * uncovering.
  */
 export interface Board {
   readonly cols: number;
   readonly rows: number;
   /** Row-major, `cols * rows` entries. Index with `idx()`. */
-  readonly cells: readonly (readonly ColorId[])[];
+  readonly tiles: readonly (ColorId | null)[];
 }
-
-/** A region must contain at least this many cells to be peelable. */
-export const MIN_REGION = 2;
 
 export function idx(board: Pick<Board, 'cols'>, x: number, y: number): number {
   return y * board.cols + x;
@@ -28,50 +29,14 @@ export function cellCount(board: Pick<Board, 'cols' | 'rows'>): number {
   return board.cols * board.rows;
 }
 
-export function createEmptyBoard(cols: number, rows: number): Board {
-  if (cols <= 0 || rows <= 0) throw new Error('createEmptyBoard: dimensions must be positive');
-  return {
-    cols,
-    rows,
-    cells: Array.from({ length: cols * rows }, () => [] as ColorId[]),
-  };
+export function boardFromPicture(source: PictureSource): Board {
+  const picture = parsePicture(source);
+  return { cols: picture.cols, rows: picture.rows, tiles: picture.tiles };
 }
 
-/** Deep-copies the stacks so the clone can be mutated independently. */
-export function cloneBoard(board: Board): Board {
-  return {
-    cols: board.cols,
-    rows: board.rows,
-    cells: board.cells.map((stack) => stack.slice()),
-  };
-}
-
-function stackAt(board: Board, i: number): readonly ColorId[] {
-  const stack = board.cells[i];
-  if (!stack) throw new Error(`board: index ${i} out of range`);
-  return stack;
-}
-
-/** The visible color of a cell, or `null` if the cell is a hole. */
-export function topColor(board: Board, i: number): ColorId | null {
-  const stack = stackAt(board, i);
-  return stack.length === 0 ? null : (stack[stack.length - 1] as ColorId);
-}
-
-/** How many layers remain in a cell. */
-export function depthAt(board: Board, i: number): number {
-  return stackAt(board, i).length;
-}
-
-/** Total layers left across the whole board. */
-export function remainingLayers(board: Board): number {
-  let total = 0;
-  for (const stack of board.cells) total += stack.length;
-  return total;
-}
-
-export function isCleared(board: Board): boolean {
-  return remainingLayers(board) === 0;
+export function tileAt(board: Board, i: number): ColorId | null {
+  if (i < 0 || i >= board.tiles.length) throw new Error(`board: index ${i} out of range`);
+  return board.tiles[i] as ColorId | null;
 }
 
 /** Indices of the up-to-four orthogonal neighbours of `i`. */
@@ -86,95 +51,87 @@ export function neighbors(board: Board, i: number): number[] {
 }
 
 /**
- * The maximal 4-connected set of cells reachable from `i` whose top
- * layers all share `i`'s top color. Returns `[]` for a hole.
+ * A tile is **accessible** when it can be reached from outside the
+ * artwork: it touches background on at least one side, or sits on the
+ * board's edge.
  *
- * This is the set a tap would peel, so it doubles as the hit-test for
- * input and the move enumerator for the solver.
+ * So at the start only the picture's outline can be taken, and clearing
+ * it opens the way inward. That is what stops a level being a flat
+ * shopping list of colors — the order you open the picture up in decides
+ * what you can reach next.
  */
-export function regionAt(board: Board, i: number): number[] {
-  const color = topColor(board, i);
-  if (color === null) return [];
+export function isAccessible(board: Board, i: number): boolean {
+  if (tileAt(board, i) === null) return false;
 
-  const seen = new Uint8Array(cellCount(board));
-  const region: number[] = [];
-  const stack: number[] = [i];
-  seen[i] = 1;
+  const { x, y } = coords(board, i);
+  // The board edge counts as open, or a picture filling its whole
+  // rectangle would have nothing accessible at all.
+  if (x === 0 || y === 0 || x === board.cols - 1 || y === board.rows - 1) return true;
 
-  while (stack.length > 0) {
-    const cur = stack.pop() as number;
-    region.push(cur);
-    for (const n of neighbors(board, cur)) {
-      if (seen[n] === 1) continue;
-      if (topColor(board, n) !== color) continue;
-      seen[n] = 1;
-      stack.push(n);
-    }
-  }
-
-  return region;
+  return neighbors(board, i).some((n) => tileAt(board, n) === null);
 }
 
-export interface PeelResult {
-  /** Board state after the peel. The input board is left untouched. */
+/** Every accessible tile, in row-major order. */
+export function accessibleTiles(board: Board): number[] {
+  const out: number[] = [];
+  for (let i = 0; i < board.tiles.length; i++) {
+    if (isAccessible(board, i)) out.push(i);
+  }
+  return out;
+}
+
+/** Every accessible tile of one color, in row-major order. */
+export function accessibleOf(board: Board, color: ColorId): number[] {
+  return accessibleTiles(board).filter((i) => tileAt(board, i) === color);
+}
+
+/** How many tiles of a color remain, reachable or not. */
+export function remainingOf(board: Board, color: ColorId): number {
+  let n = 0;
+  for (const tile of board.tiles) if (tile === color) n++;
+  return n;
+}
+
+export function remainingTiles(board: Board): number {
+  let n = 0;
+  for (const tile of board.tiles) if (tile !== null) n++;
+  return n;
+}
+
+export function isCleared(board: Board): boolean {
+  return remainingTiles(board) === 0;
+}
+
+/** Colors still on the board, lowest id first. */
+export function remainingColors(board: Board): ColorId[] {
+  const seen = new Set<ColorId>();
+  for (const tile of board.tiles) if (tile !== null) seen.add(tile);
+  return [...seen].sort((a, b) => a - b);
+}
+
+export interface TakeResult {
+  /** Board with the tiles removed. The input is left untouched. */
   board: Board;
-  /** Cells whose top layer was removed. */
-  peeled: readonly number[];
-  /** The color that was removed. */
-  color: ColorId;
+  /** Which tiles went, in the order they were taken. */
+  taken: readonly number[];
 }
 
 /**
- * Removes the top layer from every cell in the region containing `i`.
- * Returns `null` when the tap is not a legal move (a hole, or a region
- * smaller than {@link MIN_REGION}), so callers can treat `null` as
- * "ignore this tap".
+ * Takes up to `count` accessible tiles of `color`.
+ *
+ * When more are reachable than asked for, the ones nearest the top-left
+ * go first. That is deliberate rather than clever: the player is spending
+ * a number, not choosing tiles, so the rule only has to be consistent and
+ * easy to predict.
  */
-export function peel(board: Board, i: number): PeelResult | null {
-  const color = topColor(board, i);
-  if (color === null) return null;
+export function takeColor(board: Board, color: ColorId, count: number): TakeResult {
+  if (count <= 0) return { board, taken: [] };
 
-  const region = regionAt(board, i);
-  if (region.length < MIN_REGION) return null;
+  const taken = accessibleOf(board, color).slice(0, count);
+  if (taken.length === 0) return { board, taken: [] };
 
-  const next = cloneBoard(board);
-  const cells = next.cells as ColorId[][];
-  for (const cell of region) {
-    (cells[cell] as ColorId[]).pop();
-  }
+  const tiles = board.tiles.slice();
+  for (const i of taken) tiles[i] = null;
 
-  return { board: next, peeled: region, color };
-}
-
-/**
- * One representative cell index per distinct legal move. Used to detect
- * dead boards and by the generator's verification pass.
- */
-export function findMoves(board: Board): number[] {
-  const visited = new Uint8Array(cellCount(board));
-  const moves: number[] = [];
-
-  for (let i = 0; i < board.cells.length; i++) {
-    if (visited[i] === 1) continue;
-    if (topColor(board, i) === null) {
-      visited[i] = 1;
-      continue;
-    }
-    const region = regionAt(board, i);
-    for (const cell of region) visited[cell] = 1;
-    if (region.length >= MIN_REGION) moves.push(i);
-  }
-
-  return moves;
-}
-
-export function hasMoves(board: Board): boolean {
-  return findMoves(board).length > 0;
-}
-
-/** Pushes a layer onto a cell. Mutating; used only by the generator. */
-export function pushLayer(board: Board, i: number, color: ColorId): void {
-  const stack = board.cells[i];
-  if (!stack) throw new Error(`pushLayer: index ${i} out of range`);
-  (stack as ColorId[]).push(color);
+  return { board: { cols: board.cols, rows: board.rows, tiles }, taken };
 }
