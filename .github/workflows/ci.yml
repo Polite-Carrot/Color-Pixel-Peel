@@ -1,0 +1,40 @@
+# Checks, and one guard specific to how this repo ships.
+#
+# The built bundle in app/ is committed, because GitHub Pages serves this
+# branch's root directly and a browser cannot run src/ as it stands. That
+# buys a page that works with no build step and no Pages configuration —
+# and costs the risk of someone changing src/ without rebuilding, leaving
+# the site quietly serving a stale bundle. The last step below rebuilds
+# and fails if app/ does not match, so that cannot reach main unnoticed.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+
+      - name: Rebuild and confirm the committed bundle is current
+        run: |
+          npm run build
+          if ! git diff --quiet -- app; then
+            echo "::error::app/ is out of date. Run 'npm run build' and commit the result."
+            git --no-pager diff --stat -- app
+            exit 1
+          fi
+          echo "app/ matches a fresh build."

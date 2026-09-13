@@ -1,7 +1,10 @@
 node_modules/
-dist/
-dist-ssr/
 coverage/
+
+# Assembled by sync-web.js for the native shells, from files already
+# committed at the root. app/ is NOT ignored: the built bundle is the
+# shipped artifact, because Pages serves this branch's root directly.
+www/
 *.local
 .DS_Store
 *.log

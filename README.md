@@ -143,35 +143,57 @@ artifacts rather than as a stack, and bled into the neighbouring cell. A
 cleared cell leaves a cool empty socket, so it reads as glass rather than as
 nothing.
 
-## Running it
+## The repository root *is* the site
+
+Open `index.html` in a browser and the game runs. Nothing needs building
+first, and GitHub Pages needs no configuration beyond serving this branch's
+root — the same arrangement as Color Match & Merge.
+
+Getting there costs one thing, and it is worth naming: **`app/` is committed
+build output.** Pages serving a branch root can only hand a browser what is
+actually in the branch, and a browser cannot run `src/` as it stands. So Vite
+bundles `src/` into `app/app.js` and `app/app.css` with fixed names and no
+sourcemap, and those two files are checked in beside the hand-written
+`index.html`.
+
+The hazard that creates is obvious: change `src/`, forget to rebuild, and the
+site quietly serves a stale bundle. `.github/workflows/ci.yml` rebuilds on
+every push and fails if `app/` does not match, so it cannot reach `main`
+unnoticed. **After changing anything in `src/`, run `npm run build` and commit
+`app/`.**
+
+Nothing generates or rewrites `index.html`. It is written by hand and every
+reference in it is relative, which is why the same files work at a domain root
+and at `polite-carrot.github.io/Color-Pixel-Peel/` without a `base` setting to
+get wrong.
+
+### Where things live
+
+```
+index.html            the page, hand-written — the entry for everything
+fonts.css             committed: Nunito + Baloo 2, inlined
+favicon.svg
+assets/               the Polite Carrot lockup
+app/                  committed build output: app.js, app.css
+src/                  the source Vite bundles into app/
+www/                  ignored — assembled by sync-web.js for the native shells
+```
+
+### Working on it
 
 ```bash
 npm install
-npm run dev        # dev server (also exposes window.__peel for debugging)
-npm test           # 60 unit tests over the game core and hold timing
+npm run build      # typecheck + bundle src/ into app/
+npm run dev        # rebuild app/ on every save
+npm run serve      # serve the repo root, i.e. the real artifact
+npm test           # 60 unit tests
 npm run typecheck
-npm run build      # typecheck + production bundle into dist/
-npm run preview    # serve the built bundle
 ```
 
-## Deploying the web build
-
-**Pages must be set to build from the workflow, not from the branch**
-(Settings → Pages → Build and deployment → Source → **GitHub Actions**).
-
-This repo cannot be served from its own root the way Color Match & Merge can.
-That game is plain JS and CSS a browser runs as-is; this one is TypeScript
-behind Vite. Serving the root gives the *unbuilt source* — an `index.html`
-asking for `/src/main.ts`, which no browser executes, plus `fonts.css` and the
-lockup, which only exist under `public/` until a build moves them. The symptom
-is the page rendering as unstyled HTML with both screens visible at once,
-because the CSS that hides the inactive one never loaded.
-
-`.github/workflows/pages.yml` builds and publishes `dist/` instead, with the
-typecheck and tests gating the deploy so a broken build cannot replace a
-working site. `base: './'` in `vite.config.ts` keeps every reference relative,
-so it works at `polite-carrot.github.io/Color-Pixel-Peel/` as happily as at a
-domain root.
+`dev` and `serve` are two terminals: one rebuilding, one serving. There is no
+module-transforming dev server, because the page loads the same built bundle a
+visitor gets — so what you are looking at locally is the artifact, not a
+development-only variant of it.
 
 ## Shipping to iOS and Android
 
@@ -188,15 +210,23 @@ npm run ios              # build + sync + open Xcode
 npm run android          # build + sync + open Android Studio
 ```
 
-`npm run sync` (`build` + `cap sync`) is the command to re-run after any web
-change. Commit the generated `ios/` and `android/` directories once they
+`npm run sync` (`build` + `sync-web.js` + `cap sync`) is the command to re-run
+after any web change. Capacitor copies a single folder, and the game lives at
+the repository root next to `node_modules`, so `sync-web.js` assembles a clean
+`www/` from just the files `index.html` loads — taking that list from the
+page's own `<script>` and `<link>` tags rather than keeping a second copy, so
+a new module cannot silently miss the native build. The startup lockup's two
+SVGs are named in it explicitly, since they are referenced from markup rather
+than from a tag it scans. Commit the generated `ios/` and `android/` directories once they
 exist, as Capacitor intends — they carry the icons, splash screens and signing
 configuration. `.gitignore` already excludes their build output and fetched
 dependencies.
 
-App identity lives in `capacitor.config.ts` (`appId`
-`com.politecarrot.colorpixelpeel`). The native background is **black** rather
-than sky, to match the startup lockup the page opens on, so the native launch
+App identity lives in `capacitor.config.ts`: `appId`
+**`com.politecarrot.colorpixelpeel`**, which stays as it is — the identifier is
+how a store recognises an app as an update to one already installed, so
+changing it would strand every existing install rather than update it. The
+native background is **black** rather than sky, to match the startup lockup the page opens on, so the native launch
 and the lockup are one continuous screen instead of a flash of sky between
 them.
 
@@ -226,10 +256,11 @@ src/
   ui/modal.ts          # dialog open/close, focus and Escape
   native.ts            # Capacitor status bar + haptics, all optional
   main.ts              # wiring
-public/
-  fonts.css            # shared, committed: Nunito + Baloo 2, inlined
-  assets/              # shared: the Polite Carrot lockup
 ```
+
+`fonts.css` and `assets/` sit at the root rather than in a `public/` folder,
+because the root is what gets served — there is no build step to copy them
+into place.
 
 The core is deliberately DOM-free so the rules can be tested headlessly, and
 the renderer never mutates game state.

@@ -5,13 +5,13 @@
   "type": "module",
   "description": "A mobile puzzle game: peel layers of colored pixels to clear the board.",
   "scripts": {
-    "dev": "vite",
+    "dev": "vite build --watch",
+    "serve": "vite preview --outDir . --port 5173 --host",
     "build": "tsc --noEmit && vite build",
-    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit",
-    "sync": "npm run build && cap sync",
+    "sync": "npm run build && node sync-web.js && cap sync",
     "ios": "npm run sync && cap open ios",
     "android": "npm run sync && cap open android"
   },

@@ -304,19 +304,6 @@ function boot(): void {
   // the first frame — redraw once it has, or they render in a fallback.
   document.fonts?.ready.then(requestFrame).catch(() => {});
 
-  // Dev-only handle for debugging and end-to-end tests: it exposes the live
-  // game plus the cell geometry needed to aim a tap. Stripped from
-  // production builds by the `import.meta.env.DEV` guard.
-  if (import.meta.env.DEV) {
-    (window as unknown as Record<string, unknown>).__peel = {
-      get game() {
-        return game;
-      },
-      place: (i: number) => playBlock(i),
-      cellRect: (cell: number) => renderer.cellRect(cell),
-      canvasOrigin: () => canvas.getBoundingClientRect(),
-    };
-  }
 }
 
 boot();
