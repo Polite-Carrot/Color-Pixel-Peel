@@ -21,7 +21,42 @@ the top one.
 Scoring is quadratic in region size (`5 × n²`), so one big peel beats several
 small ones, plus a clear bonus that rewards unused moves.
 
-## Every level is provably solvable
+## Levels
+
+**Level 1 is written by hand.** It exists to teach the rule, and that is not
+something a generator can be asked for — the same reason Color Match writes
+its first five by hand. Everything after it is dealt.
+
+Hand-authored levels live in `core/taught.ts` as data only, written as ASCII
+layer grids so the file reads as a picture of the board rather than an array
+of indices:
+
+```
+layers: [
+  ['0000', '1111', '2222'],   // bottom layer
+  ['22..', '00..', '..00'],   // top layer; '.' is no layer here
+],
+solution: [4, 10, 0, 8, 4, 0],
+```
+
+The six moves have a deliberate shape. The first three are the smallest run
+the game allows, which is the rule being taught; clearing them tidies the
+board into three clean stripes that the last three sweep away four at a time.
+So the lesson pays itself off, and the level is gentler than the first dealt
+one on both counts — 12 cells against 20, 6 moves against 9.
+
+`level.ts` builds these and checks them exactly as it checks a dealt level:
+the stored solution is replayed through the real `peel`, so a level edited
+into an unplayable state fails loudly rather than reaching a player. The
+tests loop over the table, so adding a second authored level cannot skip any
+of those checks.
+
+`levelFor(n)` routes between the two. The dealt ladder is asked for its own
+first rung at the first dealt level rather than at level 1, so putting an
+authored level in front does not cost the difficulty curve a step: level 2 is
+the 4×5 board that used to be level 1.
+
+## Every dealt level is provably solvable
 
 Random boards deadlock. Instead of generating a board and hoping, the generator
 builds each level **backwards**:
@@ -141,7 +176,7 @@ nothing.
 ```bash
 npm install
 npm run dev        # dev server (also exposes window.__peel for debugging)
-npm test           # 76 unit tests over the game core and hold timing
+npm test           # 90 unit tests over the game core and hold timing
 npm run typecheck
 npm run build      # typecheck + production bundle into dist/
 npm run preview    # serve the built bundle
@@ -186,7 +221,9 @@ src/
     rng.ts         # seeded mulberry32, so levels are reproducible
     palette.ts     # the shared palette, letter marks, and the 150 rule
     board.ts       # layer stacks, flood-fill regions, the peel operation
-    level.ts       # reverse-peel generator + solution verifier
+    authoring.ts   # ASCII layer grids → a board, for authored levels
+    taught.ts      # the hand-authored levels, as data
+    level.ts       # authored/dealt routing, generator + solution verifier
     game.ts        # score, moves, undo, win/lose, level progression
     storage.ts     # progress, and whether it can be trusted
   render/renderer.ts   # DPR-aware canvas drawing + the lift-away animation
@@ -260,9 +297,12 @@ anything near progress.
   `xcode` ← `@capacitor/cli`. It is a dev-only dependency used to generate the
   Xcode project and is not part of the shipped app; the only available fix is a
   breaking CLI downgrade.
-- Difficulty on early levels is driven mostly by board size: full coverage
-  needs a certain number of stamps, so `targetMoves` only starts to bind on
-  later levels.
+- Difficulty on early dealt levels is driven mostly by board size: full
+  coverage needs a certain number of stamps, so `targetMoves` only starts to
+  bind on later levels.
+- Only one authored level so far. The obvious next ones each teach a rule the
+  first cannot: that a lone pixel is stuck until it gains a neighbour, and
+  that a hole breaks up the runs around it so peel order matters.
 - No sound. Color Match makes its blips with oscillators rather than audio
   files, which is the approach to copy when it is added.
 - Below 420px the topbar's back button drops the word "Menu" and keeps the

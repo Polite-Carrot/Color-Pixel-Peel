@@ -43,13 +43,25 @@ function boot(): void {
 
   const howtoOverlay = required('overlay-howto');
   const howtoClose = required<HTMLButtonElement>('howto-close');
+  const briefEl = required('brief');
+
+  /* Hand-authored levels carry their own briefing — the rule they exist to
+     teach. Dealt levels have nothing particular to say, so they fall back
+     to the standing one. */
+  const GENERIC_BRIEF =
+    'Tap a run of two or more of the same color to peel it and reveal what is underneath.';
 
   let assist = progress.assist;
   let pressed: number | null = null;
   let frame = 0;
   let overlayTimer: number | undefined;
 
+  const syncBrief = (): void => {
+    briefEl.textContent = game.level.brief ?? GENERIC_BRIEF;
+  };
+
   const syncHud = (): void => {
+    syncBrief();
     hud.update({
       level: game.levelIndex,
       score: game.score,

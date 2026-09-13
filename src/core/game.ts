@@ -1,5 +1,5 @@
 import { type Board, hasMoves, isCleared, peel } from './board';
-import { type Level, generateLevel, seedForLevel } from './level';
+import { type Level, levelFor } from './level';
 import type { ColorId } from './palette';
 
 export type GameStatus = 'playing' | 'won' | 'lost';
@@ -54,12 +54,13 @@ export class Game {
   private _history: Snapshot[] = [];
 
   /**
-   * `start` is either a level number (generated with that level's stable
-   * seed) or a ready-made {@link Level}, which lets tests and a future
-   * level-select screen drive the game without regenerating.
+   * `start` is either a level number (resolved through {@link levelFor},
+   * so hand-authored levels come first) or a ready-made {@link Level},
+   * which lets tests and a future level-select screen drive the game
+   * without rebuilding.
    */
   constructor(start: number | Level = 1, carriedScore = 0) {
-    this._level = typeof start === 'number' ? generateLevel(start, seedForLevel(start)) : start;
+    this._level = typeof start === 'number' ? levelFor(start) : start;
     this._board = this._level.board;
     this._totalScore = carriedScore;
   }
@@ -168,8 +169,7 @@ export class Game {
   /** Advances to the next level. Only valid once the current one is won. */
   nextLevel(): void {
     if (this._status !== 'won') return;
-    const next = this._level.index + 1;
-    this._level = generateLevel(next, seedForLevel(next));
+    this._level = levelFor(this._level.index + 1);
     this._board = this._level.board;
     this._movesUsed = 0;
     this._levelScore = 0;

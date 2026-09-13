@@ -4,6 +4,10 @@ import type { ColorId } from './palette';
 /**
  * Builds a board from ASCII layer grids, **bottom layer first**.
  *
+ * This is the source format for hand-authored levels (see `taught.ts`) as
+ * well as for tests: a level a person designed should be readable as a
+ * picture in the file, not as an array of indices.
+ *
  * Each layer is a list of row strings; a digit is a color id and `.`
  * means "no layer here". So
  *
@@ -16,7 +20,7 @@ import type { ColorId } from './palette';
  *
  * is a 2x2 board where the top-left cell is two layers deep.
  */
-export function boardFrom(layers: readonly (readonly string[])[]): Board {
+export function boardFromLayers(layers: readonly (readonly string[])[]): Board {
   const first = layers[0];
   if (!first || first.length === 0) throw new Error('boardFrom: need at least one non-empty layer');
 

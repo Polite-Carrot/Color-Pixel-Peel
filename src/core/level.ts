@@ -7,11 +7,14 @@ import {
   neighbors,
   peel,
   pushLayer,
+  remainingLayers,
   topColor,
   isCleared,
 } from './board';
 import { MAX_COLORS, type ColorId } from './palette';
 import { type Rng, createRng } from './rng';
+import { boardFromLayers } from './authoring';
+import { TAUGHT, TAUGHT_COUNT } from './taught';
 
 export interface LevelConfig {
   cols: number;
@@ -38,6 +41,10 @@ export interface Level {
   solution: readonly number[];
   /** `solution.length` plus slack, so imperfect play can still win. */
   moveLimit: number;
+  /** Shown above the board. Hand-authored levels say what they teach. */
+  brief?: string;
+  /** True for a level a person designed rather than one dealt from a seed. */
+  taught?: boolean;
 }
 
 /** Difficulty curve. Grows the grid, the palette and the solution length. */
@@ -209,6 +216,62 @@ export function generateLevel(index: number, seed: number, configOverride?: Part
     solution,
     moveLimit: solution.length + slack,
   };
+}
+
+/**
+ * Builds one of the hand-authored levels and checks it the same way a
+ * generated one is checked: its stored solution is replayed through the
+ * real `peel`, so a level edited into an unplayable state fails loudly
+ * here rather than reaching a player.
+ */
+export function taughtLevel(index: number): Level {
+  const taught = TAUGHT[index - 1];
+  if (!taught) throw new Error(`taughtLevel: no hand-authored level ${index}`);
+
+  const board = boardFromLayers(taught.layers);
+
+  if (remainingLayers(board) === 0) {
+    throw new Error(`taughtLevel: level ${index} has no layers to peel`);
+  }
+  if (!verifySolution(board, taught.solution)) {
+    throw new Error(`taughtLevel: level ${index}'s stored solution does not clear its board`);
+  }
+  if (taught.solution.length > taught.moveLimit) {
+    throw new Error(`taughtLevel: level ${index} needs more moves than its own limit allows`);
+  }
+
+  const colors = Math.max(...board.cells.flatMap((stack) => [...stack])) + 1;
+
+  return {
+    index,
+    seed: 0,
+    config: {
+      cols: board.cols,
+      rows: board.rows,
+      colors,
+      targetMoves: taught.solution.length,
+      maxStamp: MIN_REGION,
+    },
+    board,
+    solution: taught.solution,
+    moveLimit: taught.moveLimit,
+    brief: taught.brief,
+    taught: true,
+  };
+}
+
+/**
+ * The level for a given number: the hand-authored ones first, then the
+ * generated ladder.
+ *
+ * The ladder is asked for its own first rung at the first generated
+ * level rather than at level 1, so putting a taught level in front does
+ * not skip a step of the difficulty curve.
+ */
+export function levelFor(index: number): Level {
+  if (index <= TAUGHT_COUNT) return taughtLevel(index);
+  const rung = index - TAUGHT_COUNT;
+  return generateLevel(index, seedForLevel(index), levelConfig(rung));
 }
 
 /**

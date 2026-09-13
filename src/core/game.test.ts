@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { Game, clearBonus, regionScore } from './game';
 import { isCleared } from './board';
 import { type Level, levelConfig } from './level';
-import { boardFrom } from './test-helpers';
+import { boardFromLayers } from './authoring';
 
 /** Wraps a hand-made board as a Level so loss paths can be forced. */
 function levelOf(layers: readonly (readonly string[])[], moveLimit: number): Level {
@@ -10,7 +10,7 @@ function levelOf(layers: readonly (readonly string[])[], moveLimit: number): Lev
     index: 1,
     seed: 0,
     config: levelConfig(1),
-    board: boardFrom(layers),
+    board: boardFromLayers(layers),
     solution: [],
     moveLimit,
   };
