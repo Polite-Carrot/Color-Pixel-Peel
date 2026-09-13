@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- viewport-fit=cover lets the layout extend under the notch/home
+         indicator; the CSS then pads back with env(safe-area-inset-*). -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <meta name="theme-color" content="#0d1017" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="description" content="Peel layers of colored pixels to clear the board." />
+    <title>Color Pixel Peel</title>
+  </head>
+  <body>
+    <div id="app">
+      <header class="hud">
+        <div class="hud__stat">
+          <span class="hud__label">Level</span>
+          <span class="hud__value" id="stat-level">1</span>
+        </div>
+        <div class="hud__stat">
+          <span class="hud__label">Score</span>
+          <span class="hud__value" id="stat-score">0</span>
+        </div>
+        <div class="hud__stat" id="stat-moves-wrap">
+          <span class="hud__label">Moves</span>
+          <span class="hud__value" id="stat-moves">0</span>
+        </div>
+        <div class="hud__stat">
+          <span class="hud__label">Best</span>
+          <span class="hud__value" id="stat-best">0</span>
+        </div>
+      </header>
+
+      <main class="board">
+        <canvas id="board" aria-label="Game board"></canvas>
+        <div class="overlay" id="overlay" hidden>
+          <div class="overlay__card">
+            <h2 class="overlay__title" id="overlay-title">Level clear</h2>
+            <p class="overlay__body" id="overlay-body"></p>
+            <button class="btn btn--primary" id="overlay-action" type="button">Next level</button>
+          </div>
+        </div>
+      </main>
+
+      <nav class="controls">
+        <button class="btn" id="btn-undo" type="button" aria-label="Undo last peel">Undo</button>
+        <button class="btn" id="btn-restart" type="button" aria-label="Restart level">Restart</button>
+        <button
+          class="btn"
+          id="btn-symbols"
+          type="button"
+          aria-pressed="false"
+          aria-label="Toggle color symbols for colorblind accessibility"
+        >
+          Symbols
+        </button>
+      </nav>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

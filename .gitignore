@@ -1,0 +1,22 @@
+node_modules/
+dist/
+dist-ssr/
+coverage/
+*.local
+.DS_Store
+*.log
+npm-debug.log*
+
+# Capacitor: the native projects themselves are meant to be committed
+# (they hold signing config, icons and plugin wiring), but their build
+# output and fetched dependencies are not.
+ios/App/Pods/
+ios/App/App/public/
+ios/App/output/
+ios/DerivedData/
+android/.gradle/
+android/build/
+android/app/build/
+android/app/src/main/assets/public/
+android/local.properties
+android/.idea/

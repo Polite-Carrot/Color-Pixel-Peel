@@ -1,0 +1,227 @@
+:root {
+  --bg: #0d1017;
+  --surface: #161b26;
+  --surface-hi: #1f2633;
+  --border: #2b3444;
+  --text: #e8ecf4;
+  --text-dim: #8a95a8;
+  --accent: #5ac8fa;
+  --danger: #ff6b6b;
+
+  --radius: 14px;
+  --hud-gap: 10px;
+
+  /* Safe-area insets, defaulted to 0 for browsers/desktop. */
+  --sat: env(safe-area-inset-top, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+  --sal: env(safe-area-inset-left, 0px);
+  --sar: env(safe-area-inset-right, 0px);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+  font: 600 16px/1.4 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+    'Helvetica Neue', Arial, sans-serif;
+
+  /* A game canvas should never pan, zoom, select or flash a tap
+     highlight under the player's thumb. */
+  touch-action: manipulation;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
+}
+
+#app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: calc(var(--sat) + 10px) calc(var(--sar) + 12px)
+    calc(var(--sab) + 10px) calc(var(--sal) + 12px);
+  gap: var(--hud-gap);
+}
+
+/* ---------- HUD ---------- */
+
+.hud {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.hud__stat {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 7px 4px 8px;
+  text-align: center;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.hud__stat--warn {
+  border-color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 14%, var(--surface));
+}
+
+.hud__label {
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.hud__value {
+  display: block;
+  font-size: 20px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Board ---------- */
+
+.board {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#board {
+  display: block;
+  /* Actual pixel size is set by the renderer for device-pixel-ratio
+     correctness; these just stop it overflowing its flex parent. */
+  max-width: 100%;
+  max-height: 100%;
+  touch-action: none;
+}
+
+/* ---------- Overlay ---------- */
+
+.overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: color-mix(in srgb, var(--bg) 78%, transparent);
+  backdrop-filter: blur(3px);
+  animation: fade-in 0.22s ease-out;
+}
+
+.overlay[hidden] {
+  display: none !important;
+}
+
+.overlay__card {
+  width: 100%;
+  max-width: 320px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 22px 20px;
+  text-align: center;
+}
+
+.overlay__title {
+  margin: 0 0 6px;
+  font-size: 24px;
+  font-weight: 800;
+}
+
+.overlay__body {
+  margin: 0 0 18px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+
+/* ---------- Buttons ---------- */
+
+.controls {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.btn {
+  appearance: none;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  /* 46px keeps every control above the ~44pt minimum touch target. */
+  min-height: 46px;
+  padding: 0 14px;
+  cursor: pointer;
+  transition: transform 0.08s, background 0.15s, opacity 0.15s;
+}
+
+.btn:active {
+  transform: scale(0.96);
+  background: var(--surface-hi);
+}
+
+.btn:disabled {
+  opacity: 0.38;
+  cursor: default;
+}
+
+.btn--primary {
+  width: 100%;
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #06222e;
+}
+
+.btn[aria-pressed='true'] {
+  background: var(--surface-hi);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Landscape phones: HUD and controls side-by-side would cost too much
+   height, so shrink them instead. */
+@media (orientation: landscape) and (max-height: 520px) {
+  .hud__value {
+    font-size: 16px;
+  }
+  .btn {
+    min-height: 40px;
+  }
+}
