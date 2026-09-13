@@ -334,6 +334,98 @@ body {
   flex: 0 0 auto;
 }
 
+/* ───────── picking a level ───────── */
+
+.subhead {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 18px;
+  flex: none;
+}
+.subhead__title { flex: 1; min-width: 0; text-align: center; line-height: 1.15; }
+.subhead__title h2 {
+  margin: 0;
+  font-family: "Baloo 2", sans-serif;
+  font-weight: 800;
+  font-size: 26px;
+}
+.subhead__title span { color: var(--ink-soft); font-size: 14px; font-weight: 700; }
+/* Balances the back button so the title sits centred on the screen
+   rather than on the space left over beside it. */
+.subhead__balance { flex: 0 0 86px; }
+
+/* The one place scrolling is welcome, once there are enough pictures to
+   be taller than the window. */
+#screen-levels.is-active { overflow: hidden; }
+#screen-levels.is-active .level-grid {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 2px 2px 12px;
+}
+
+.level-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  /* Adapt to whatever room the window gives — a phone gets three, an
+     iPad far more. align-content stops a few rows drifting apart to fill
+     the height. */
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 12px;
+  align-content: start;
+}
+
+.tile {
+  width: 100%;
+  aspect-ratio: 1 / 0.86;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 4px;
+  border: var(--stroke) solid var(--ink);
+  border-radius: 14px;
+  background: var(--paper-warm);
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+  box-shadow: 0 var(--lift) 0 var(--ink);
+  transition: transform .09s ease, box-shadow .09s ease, background .14s ease;
+}
+.tile:hover:not(:disabled) { background: #ffe8c6; }
+.tile:active:not(:disabled) { transform: translateY(var(--lift)); box-shadow: 0 0 0 var(--ink); }
+.tile:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+.tile:disabled {
+  cursor: default;
+  color: rgba(43, 33, 66, .45);
+  background: rgba(255, 255, 255, .6);
+  box-shadow: 0 var(--lift) 0 var(--ink-faint);
+}
+/* The one to play next. */
+.tile.is-next { background: var(--gold); }
+
+.tile__no {
+  font-family: "Baloo 2", sans-serif;
+  font-weight: 800;
+  font-size: 21px;
+  line-height: 1;
+}
+.tile__name {
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.1;
+  text-align: center;
+  color: var(--ink-soft);
+}
+.tile.is-next .tile__name { color: var(--ink); }
+.tile__state { font-size: 12px; line-height: 1; }
+.tile:disabled .tile__name { color: rgba(43, 33, 66, .4); }
+
 /* ───────── game chrome ───────── */
 
 .topbar {
@@ -743,11 +835,19 @@ body {
   min-width: 0;
 }
 
+/* The queue's height is RESERVED rather than sized to its contents.
+   Without this the tray shrank as columns emptied — from 114px to 57px
+   over a level — and the picture grew into the space it left, so the
+   artwork changed size while being played. The blocks sit at the bottom
+   of the reserved box, so the board's size is fixed for the whole
+   level. */
 .column__queue {
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: flex-end;
   gap: 3px;
+  min-height: 101px;   /* 3 peeks + their gaps + the "+n" line */
 }
 
 .column__more {
@@ -853,8 +953,9 @@ body {
   .slot { width: 40px; height: 40px; }
   .chip--front, .chip--spent { width: 46px; height: 46px; font-size: 21px; }
   .chip--peek { width: 23px; height: 23px; font-size: 12px; }
+  .column__queue { min-height: 89px; }
 }
 @media (max-height: 640px) {
   .chip--peek { width: 19px; height: 19px; font-size: 10px; border-width: 2px; }
-  .column__queue { gap: 2px; }
+  .column__queue { gap: 2px; min-height: 75px; }
 }

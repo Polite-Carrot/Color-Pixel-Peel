@@ -62,6 +62,27 @@ still shows it — and then flies toward the panel, shrinking and turning as it
 goes. The stagger shrinks as the take grows so even a big block lands inside
 about two thirds of a second.
 
+### The picture stays the same size while you play it
+
+The board is sized once per level and does not move again. That needs the
+hand's height to be fixed, which it is not by nature: as columns empty there
+is less queued behind each front block, so the tray shrank from 158px to 57px
+over a level and the picture grew into the space it left — the artwork
+visibly changing size mid-play.
+
+So `.column__queue` **reserves** the height of a full queue rather than sizing
+to its contents, and the blocks sit at the bottom of that reserved box.
+Measured across nine plays, the canvas now holds at exactly one height from
+the first block to the last.
+
+### Picking a picture
+
+Home opens the picture list rather than dropping straight into a level, so a
+cleared one can be played again. Everything up to the highest level reached is
+open, the next one is picked out in gold, and the rest are shown but locked —
+the list says how much game there is, not only how much of it you have seen.
+The board's **← Menu** and the win card's **Menu** both return here.
+
 ### Levels, and the curve
 
 | | Picture | Tiles | Colors | Slots | Columns |
@@ -283,7 +304,7 @@ src/
     storage.ts     # progress, and whether it can be trusted
   render/renderer.ts   # DPR-aware canvas drawing + the lift-away animation
   input/pointer.ts     # pointer/touch → cell, with drag-slop rejection
-  ui/screens.ts        # home and board, and what home says about progress
+  ui/screens.ts        # home, the picture list, and the board
   ui/hud.ts            # topbar, toolbar and the win/loss card
   ui/settings.ts       # the settings dialog and the erase flow
   ui/hold.ts           # press-and-hold timing, no DOM — tested
@@ -385,7 +406,10 @@ render smaller.
   ones nearest the top-left. That is consistent and predictable but arbitrary —
   if the player should be choosing, this is the rule to change.
 - Four levels. The curve has room in it but the pictures are hand-drawn, and
-  that is the slow part.
+  that is the slow part. The picture list is built for more — it wraps to
+  whatever width the window gives and scrolls once there are enough.
+- The list shows cleared, next and locked, but no score per level. There is no
+  par to measure a run against, so there is nothing honest to put there yet.
 - The hand shows three blocks behind each front one and then a `+n`. A much
   longer column would need a different answer than a count.
 - No sound. Color Match makes its blips with oscillators rather than audio

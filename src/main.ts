@@ -164,6 +164,24 @@ function boot(): void {
     screens.show('home');
   };
 
+  /** Starts a level from the picture list, or resumes the current one. */
+  const startLevel = (index: number): void => {
+    if (game.levelIndex !== index || game.status !== 'playing') {
+      game = new Game(index, game.score);
+      renderer.setBoard(game.board);
+      renderer.clearAnims();
+    }
+    startPlaying();
+  };
+
+  const goLevels = (): void => {
+    window.clearTimeout(overlayTimer);
+    hud.hideOverlay();
+    syncHome();
+    screens.renderLevels(progress.unlockedLevel, startLevel);
+    screens.show('levels');
+  };
+
   const startPlaying = (): void => {
     screens.show('game');
     syncHud();
@@ -186,11 +204,11 @@ function boot(): void {
           title: 'Picture clear',
           score: game.score.toLocaleString(),
           body: `${game.level.name} — every tile taken.`,
-          actionLabel: game.isLastLevel ? 'Back to menu' : 'Next level',
+          actionLabel: game.isLastLevel ? 'Back to the pictures' : 'Next level',
         },
         () => {
           if (game.isLastLevel) {
-            goHome();
+            goLevels();
             return;
           }
           game.nextLevel();
@@ -285,22 +303,17 @@ function boot(): void {
     onCancel: () => {},
   });
 
-  screens.playButton.addEventListener('click', () => {
-    // Pick up wherever progress reached, rather than replaying level 1.
-    if (game.levelIndex !== progress.unlockedLevel || game.status !== 'playing') {
-      game = new Game(progress.unlockedLevel);
-      renderer.setBoard(game.board);
-      renderer.clearAnims();
-    }
-    startPlaying();
-  });
+  /* Home goes to the picture list rather than straight into a level, so
+     a finished one can be played again. */
+  screens.playButton.addEventListener('click', goLevels);
+  screens.levelsBackButton.addEventListener('click', goHome);
 
   screens.howtoButton.addEventListener('click', () => modal.open(howtoOverlay, howtoClose));
   howtoClose.addEventListener('click', () => modal.close(howtoOverlay));
   screens.settingsButton.addEventListener('click', () => settings.open());
   hud.settingsButton.addEventListener('click', () => settings.open());
-  hud.menuButton.addEventListener('click', goHome);
-  hud.overlayMenuButton.addEventListener('click', goHome);
+  hud.menuButton.addEventListener('click', goLevels);
+  hud.overlayMenuButton.addEventListener('click', goLevels);
 
   hud.undoButton.addEventListener('click', () => {
     if (!game.undo()) return;
