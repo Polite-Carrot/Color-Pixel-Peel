@@ -49,6 +49,44 @@ imperfect play is recoverable either way.
 Levels are keyed by a stable seed (`seedForLevel`), so level 7 is the same
 board for every player on every device.
 
+## The screens
+
+Home and the board are two screens in one document. There is **one mode**, so
+home is a masthead, a single way in, and the footer pair — not Color Match's
+grid of four. `Play` picks up at the highest level reached rather than
+replaying level 1.
+
+Color Match's mode icons say something true: its jar fills with how far
+through the hundred levels you are. These levels are generated without end, so
+there is no honest denominator to fill against — a meter there would be
+decoration pretending to be information. The icon shows the mechanic instead,
+a stack with its top layer lifting off, and the real numbers (level reached,
+best score) go in the subtitle where they can be stated plainly.
+
+**Settings** is reachable from home and from the board, so Color Blind Assist
+can be turned on without leaving a level. It holds what Color Match's does,
+minus sound, which this game does not have yet.
+
+### Erasing progress
+
+Wiping progress asks, and then asks for six seconds of intent: a dialog
+naming exactly what goes — the level reached and the best score — and then a
+button that has to be held while a bar fills. Letting go early stops the bar
+dead and nothing is lost.
+
+The bar is driven frame by frame from script rather than by a CSS transition,
+so releasing stops it exactly where it stood instead of animating on to
+somewhere it never reached. That timing lives in `ui/hold.ts`, free of the DOM
+and of `requestAnimationFrame` so the rules are testable: that an early
+release loses nothing, that the action fires exactly once and only after the
+full duration, and that keyboard auto-repeat is not holding. Holding works by
+pointer or by keyboard, and the pointer is captured so a finger sliding off
+the button still counts.
+
+The assist preference **survives** the erase. It lives under its own key for
+exactly this reason: a preference is not something earned, and wiping progress
+should not silently change how the board is drawn.
+
 ## Shared with Color Match & Merge
 
 This is meant to read as coming from the same place, so the parts that carry
@@ -103,7 +141,7 @@ nothing.
 ```bash
 npm install
 npm run dev        # dev server (also exposes window.__peel for debugging)
-npm test           # 67 unit tests over the game core
+npm test           # 76 unit tests over the game core and hold timing
 npm run typecheck
 npm run build      # typecheck + production bundle into dist/
 npm run preview    # serve the built bundle
@@ -153,7 +191,11 @@ src/
     storage.ts     # progress, and whether it can be trusted
   render/renderer.ts   # DPR-aware canvas drawing + the lift-away animation
   input/pointer.ts     # pointer/touch → cell, with drag-slop rejection
+  ui/screens.ts        # home and board, and what home says about progress
   ui/hud.ts            # topbar, toolbar and the win/loss card
+  ui/settings.ts       # the settings dialog and the erase flow
+  ui/hold.ts           # press-and-hold timing, no DOM — tested
+  ui/modal.ts          # dialog open/close, focus and Escape
   native.ts            # Capacitor status bar + haptics, all optional
   main.ts              # wiring
 public/
@@ -212,9 +254,6 @@ anything near progress.
 
 ## Known gaps
 
-- **No home screen.** Color Match opens on a menu of modes; this opens straight
-  onto level 1. The chrome, cards and buttons are the shared ones, so adding a
-  masthead and menu is styling that already exists rather than new design.
 - The move limit is not a proven par — see above. A real par would need a
   search over peel states, which this game does not have.
 - `npm audit` reports a moderate advisory in `uuid`, reached via
@@ -226,3 +265,8 @@ anything near progress.
   later levels.
 - No sound. Color Match makes its blips with oscillators rather than audio
   files, which is the approach to copy when it is added.
+- Below 420px the topbar's back button drops the word "Menu" and keeps the
+  arrow. With it, the button and the stat chips squeezed the title column to
+  62px, wrapping both the level name and the board shape onto second lines and
+  taking the topbar from 77px to 126px — nearly 60px off the board on an
+  iPhone SE. The button keeps its accessible name either way.

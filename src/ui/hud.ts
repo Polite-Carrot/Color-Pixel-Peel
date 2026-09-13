@@ -8,9 +8,7 @@ export interface HudModel {
   level: number;
   score: number;
   movesLeft: number;
-  best: number;
   canUndo: boolean;
-  assist: boolean;
   /** Board shape, shown as the subtitle. */
   cols: number;
   rows: number;
@@ -36,8 +34,6 @@ export class Hud {
   private readonly score = required('stat-score');
   private readonly moves = required('stat-moves');
   private readonly movesWrap = required('stat-moves-wrap');
-  private readonly best = required('stat-best');
-  private readonly saveWarning = required('save-warning');
 
   private readonly overlay = required('overlay');
   private readonly overlayTitle = required('overlay-title');
@@ -48,7 +44,9 @@ export class Hud {
 
   readonly undoButton = required<HTMLButtonElement>('btn-undo');
   readonly restartButton = required<HTMLButtonElement>('btn-restart');
-  readonly assistButton = required<HTMLButtonElement>('btn-assist');
+  readonly settingsButton = required<HTMLButtonElement>('btn-settings');
+  readonly menuButton = required<HTMLButtonElement>('btn-menu');
+  readonly overlayMenuButton = required<HTMLButtonElement>('overlay-menu');
 
   update(model: HudModel): void {
     this.levelName.textContent = `Level ${model.level}`;
@@ -60,20 +58,8 @@ export class Hud {
       `${model.cols} × ${model.rows} · ${model.colors} color${model.colors === 1 ? '' : 's'}`;
     this.score.textContent = model.score.toLocaleString();
     this.moves.textContent = String(model.movesLeft);
-    this.best.textContent = model.best.toLocaleString();
     this.undoButton.disabled = !model.canUndo;
-    this.assistButton.setAttribute('aria-pressed', String(model.assist));
     this.movesWrap.classList.toggle('is-low', model.movesLeft <= LOW_MOVES);
-  }
-
-  /** Says which store progress landed in, when it is not the good one. */
-  showSaveWarning(message: string | null): void {
-    if (!message) {
-      this.saveWarning.hidden = true;
-      return;
-    }
-    this.saveWarning.textContent = message;
-    this.saveWarning.hidden = false;
   }
 
   showOverlay(model: OverlayModel, onAction: () => void, onSecondary?: () => void): void {
@@ -116,5 +102,9 @@ export class Hud {
 
   get overlayVisible(): boolean {
     return !this.overlay.hidden;
+  }
+
+  get overlayElement(): HTMLElement {
+    return this.overlay;
   }
 }

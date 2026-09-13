@@ -2,19 +2,31 @@ import './style.css';
 
 import { Game } from './core/game';
 import {
+  DEFAULT_PROGRESS,
   loadProgress,
+  resetProgress,
   savePrefs,
   saveProgress,
+  storeKind,
   storeWarning,
   type Progress,
 } from './core/storage';
 import { attachPointer } from './input/pointer';
 import { Renderer } from './render/renderer';
 import { Hud } from './ui/hud';
+import * as modal from './ui/modal';
+import { Screens } from './ui/screens';
+import { Settings } from './ui/settings';
 import { initNative, peelFeedback, rejectFeedback } from './native';
 
 /** Let the lift-away animation finish before the card covers the board. */
 const OVERLAY_DELAY_MS = 360;
+
+function required<T extends HTMLElement>(id: string): T {
+  const el = document.getElementById(id);
+  if (!el) throw new Error(`boot: missing #${id}`);
+  return el as T;
+}
 
 function boot(): void {
   const canvas = document.getElementById('board');
@@ -24,9 +36,13 @@ function boot(): void {
   }
 
   let progress: Progress = loadProgress();
-  const game = new Game(progress.unlockedLevel);
+  let game = new Game(progress.unlockedLevel);
   const renderer = new Renderer(canvas, game.board);
   const hud = new Hud();
+  const screens = new Screens();
+
+  const howtoOverlay = required('overlay-howto');
+  const howtoClose = required<HTMLButtonElement>('howto-close');
 
   let assist = progress.assist;
   let pressed: number | null = null;
@@ -38,13 +54,15 @@ function boot(): void {
       level: game.levelIndex,
       score: game.score,
       movesLeft: game.movesLeft,
-      best: Math.max(progress.bestScore, game.score),
       canUndo: game.canUndo,
-      assist,
       cols: game.board.cols,
       rows: game.board.rows,
       colors: game.level.config.colors,
     });
+  };
+
+  const syncHome = (): void => {
+    screens.updateHome({ level: progress.unlockedLevel, bestScore: progress.bestScore });
   };
 
   const draw = (): void => {
@@ -84,6 +102,20 @@ function boot(): void {
     requestFrame();
   };
 
+  const goHome = (): void => {
+    window.clearTimeout(overlayTimer);
+    hud.hideOverlay();
+    syncHome();
+    screens.show('home');
+  };
+
+  const startPlaying = (): void => {
+    screens.show('game');
+    syncHud();
+    // The board has only just been given a size, so measure it now.
+    resize();
+  };
+
   const showEndCard = (): void => {
     if (game.status === 'won') {
       progress = {
@@ -92,6 +124,7 @@ function boot(): void {
         bestScore: Math.max(progress.bestScore, game.score),
       };
       saveProgress(progress);
+      syncHome();
 
       hud.showOverlay(
         {
@@ -111,6 +144,7 @@ function boot(): void {
 
     progress = { ...progress, bestScore: Math.max(progress.bestScore, game.score) };
     saveProgress(progress);
+    syncHome();
 
     const stranded = game.lossReason === 'no-moves';
     hud.showOverlay(
@@ -160,6 +194,28 @@ function boot(): void {
     }
   };
 
+  const settings = new Settings({
+    getAssist: () => assist,
+    setAssist: (value) => {
+      assist = value;
+      progress = { ...progress, assist };
+      savePrefs(progress);
+      requestFrame();
+    },
+    storeNote: () => storeWarning(),
+    describeProgress: () =>
+      progress.unlockedLevel > 1 || progress.bestScore > 0
+        ? `level ${progress.unlockedLevel} and your best score of ${progress.bestScore.toLocaleString()}`
+        : 'your progress',
+    onReset: () => {
+      resetProgress();
+      progress = { ...DEFAULT_PROGRESS, assist };
+      game = new Game(progress.unlockedLevel);
+      refreshBoard();
+      syncHome();
+    },
+  });
+
   attachPointer(canvas, (x, y) => renderer.hitTest(x, y), {
     onPress: (cell) => {
       pressed = cell;
@@ -171,6 +227,23 @@ function boot(): void {
       requestFrame();
     },
   });
+
+  screens.playButton.addEventListener('click', () => {
+    // Pick up wherever progress reached, rather than replaying level 1.
+    if (game.levelIndex !== progress.unlockedLevel || game.status !== 'playing') {
+      game = new Game(progress.unlockedLevel);
+      renderer.setBoard(game.board);
+      renderer.clearAnims();
+    }
+    startPlaying();
+  });
+
+  screens.howtoButton.addEventListener('click', () => modal.open(howtoOverlay, howtoClose));
+  howtoClose.addEventListener('click', () => modal.close(howtoOverlay));
+  screens.settingsButton.addEventListener('click', () => settings.open());
+  hud.settingsButton.addEventListener('click', () => settings.open());
+  hud.menuButton.addEventListener('click', goHome);
+  hud.overlayMenuButton.addEventListener('click', goHome);
 
   hud.undoButton.addEventListener('click', () => {
     if (!game.undo()) return;
@@ -186,13 +259,15 @@ function boot(): void {
     refreshBoard();
   });
 
-  hud.assistButton.addEventListener('click', () => {
-    assist = !assist;
-    progress = { ...progress, assist };
-    savePrefs(progress);
-    syncHud();
-    requestFrame();
-  });
+  /* Escape dismisses the top-most dialog. On the end card it dismisses
+     onto the board rather than to the menu: someone may want to look at
+     the board before choosing, and the card comes back on the next move,
+     with undo and restart still on the toolbar. */
+  modal.onEscape([
+    { overlay: settings.element, dismiss: () => settings.close() },
+    { overlay: howtoOverlay, dismiss: () => modal.close(howtoOverlay) },
+    { overlay: hud.overlayElement, dismiss: () => hud.hideOverlay() },
+  ]);
 
   if (typeof ResizeObserver !== 'undefined') {
     new ResizeObserver(resize).observe(boardEl);
@@ -202,9 +277,11 @@ function boot(): void {
   window.visualViewport?.addEventListener('resize', resize);
   window.visualViewport?.addEventListener('scroll', publishViewport);
 
-  resize();
+  publishViewport();
+  syncHome();
   syncHud();
-  hud.showSaveWarning(storeWarning());
+  screens.show('home');
+  screens.showSaveWarning(storeWarning(), storeKind);
   void initNative();
 
   // The letter marks are drawn in Baloo 2, which may not have arrived by
@@ -216,7 +293,9 @@ function boot(): void {
   // production builds by the `import.meta.env.DEV` guard.
   if (import.meta.env.DEV) {
     (window as unknown as Record<string, unknown>).__peel = {
-      game,
+      get game() {
+        return game;
+      },
       solution: () => [...game.level.solution],
       cellRect: (cell: number) => renderer.cellRect(cell),
       canvasOrigin: () => canvas.getBoundingClientRect(),

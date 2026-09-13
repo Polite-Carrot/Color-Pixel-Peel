@@ -141,6 +141,169 @@ body {
     calc(18px + env(safe-area-inset-left));
 }
 
+/* ───────── screens ───────── */
+
+.screen { display: none; flex: 1; min-height: 0; }
+.screen.is-active {
+  display: flex;
+  flex-direction: column;
+  animation: rise .34s cubic-bezier(.2, .9, .3, 1.2) both;
+}
+@keyframes rise {
+  from { opacity: 0; transform: translateY(14px) scale(.985); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* The scrolling goes on the SCREEN, not on the card list, and that
+   distinction is the whole of it: a scroll container clips to its padding
+   box, and these cards are drawn with a hard shadow that lives outside
+   theirs — so a scrolling list costs the bottom card its shadow and every
+   card the outer half of its focus ring. */
+#screen-home.is-active {
+  overflow-y: auto;
+  overflow-x: hidden;
+  justify-content: center;
+  gap: 10px;
+}
+/* The game screen is sized to the window and nothing scrolls, so the
+   board, the buttons and the briefing are always in view. */
+#screen-game.is-active { gap: 10px; overflow: hidden; }
+#screen-game.is-active > * { flex: none; }
+#screen-game.is-active > .board { flex: 1 1 auto; }
+
+/* ───────── home ───────── */
+
+.masthead { text-align: center; margin: 4px 0 22px; flex: none; }
+
+.masthead__mark {
+  display: flex;
+  justify-content: center;
+  gap: 9px;
+  padding-top: 8px;
+  margin-bottom: 14px;
+}
+/* Three tiles at a bob, each showing a sliver of the layer beneath — the
+   mechanic in miniature. */
+.masthead__mark span {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: linear-gradient(180deg, var(--c) 72%, rgba(43, 33, 66, .28) 72%);
+  border: var(--stroke) solid var(--ink);
+  box-shadow: 0 4px 0 var(--ink);
+  animation: bob 2.4s ease-in-out infinite;
+}
+.masthead__mark span:nth-child(2) { animation-delay: .18s; }
+.masthead__mark span:nth-child(3) { animation-delay: .36s; }
+@keyframes bob { 50% { transform: translateY(-8px) rotate(-4deg); } }
+
+.masthead h1 {
+  margin: 0;
+  font-family: "Baloo 2", sans-serif;
+  font-weight: 800;
+  font-size: clamp(40px, 8.6vw, 70px);
+  line-height: .98;
+  letter-spacing: -.01em;
+  color: #fff;
+  /* Stroke behind the fill, then a hard drop below: cartoon lettering. */
+  -webkit-text-stroke: 7px var(--ink);
+  paint-order: stroke fill;
+  text-shadow: 0 7px 0 var(--ink);
+  text-wrap: balance;
+}
+.masthead__tag {
+  margin: 16px auto 0;
+  max-width: 30ch;
+  color: var(--ink);
+  font-weight: 700;
+  font-size: 17px;
+  text-wrap: balance;
+}
+
+.choices {
+  display: grid;
+  gap: 16px;
+  width: 100%;
+  max-width: 520px;
+  margin: 0 auto;
+  flex: none;
+}
+
+.choice {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  padding: 18px 20px;
+  text-align: left;
+  border: var(--stroke) solid var(--ink);
+  border-radius: var(--radius);
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+  box-shadow: 0 6px 0 var(--ink);
+  transition: transform .09s ease, box-shadow .09s ease, background .14s ease;
+}
+.choice:hover { background: var(--paper-warm); }
+.choice:active { transform: translateY(6px); box-shadow: 0 0 0 var(--ink); }
+.choice:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+
+.choice__body { flex: 1; min-width: 0; line-height: 1.2; }
+.choice__name {
+  display: block;
+  font-family: "Baloo 2", sans-serif;
+  font-weight: 800;
+  font-size: 25px;
+}
+.choice__sub { display: block; color: var(--ink-soft); font-size: 14.5px; font-weight: 700; }
+.choice__go {
+  font-family: "Baloo 2", sans-serif;
+  font-weight: 800;
+  font-size: 30px;
+  color: var(--ink-soft);
+  line-height: 1;
+}
+
+/* Color Match's jar icon fills with how far through its hundred levels you
+   are, on the principle that an icon should say something true. These
+   levels are generated without end, so there is no honest denominator to
+   fill against — the icon shows the mechanic instead, a stack with its top
+   layer lifting off, and the real numbers go in the subtitle. */
+.choice__stack {
+  position: relative;
+  flex: 0 0 50px;
+  width: 50px;
+  height: 62px;
+}
+.choice__stack i {
+  position: absolute;
+  left: 0;
+  width: 38px;
+  height: 38px;
+  border-radius: 9px;
+  border: var(--stroke) solid var(--ink);
+}
+.choice__stack i:nth-child(1) { bottom: 0;  background: #3b7bf7; }
+.choice__stack i:nth-child(2) { bottom: 9px; left: 6px; background: #ffd028; }
+.choice__stack i:nth-child(3) {
+  bottom: 22px;
+  left: 12px;
+  background: #f5423c;
+  transform: rotate(-9deg);
+}
+
+.menu-foot {
+  display: flex;
+  justify-content: center;
+  gap: 11px;
+  margin-top: 24px;
+  /* The footer holds the only way to the rules and the settings, so on a
+     screen too short to show everything it must shrink rather than be
+     pushed past the bottom where nothing can reach it. */
+  flex: 0 0 auto;
+}
+
 /* ───────── game chrome ───────── */
 
 .topbar {
@@ -153,6 +316,17 @@ body {
   border-radius: var(--radius);
   padding: 11px 16px;
   box-shadow: 0 5px 0 var(--ink);
+}
+.topbar__back { flex: 0 0 auto; padding: 9px 13px; font-size: 15px; min-height: 40px; }
+
+/* On a narrow screen the word costs more than it earns: with it, the back
+   button and the stat chips squeeze the title column to 62px and both the
+   level name and the board shape wrap to two lines, taking the topbar from
+   70px to 126px — nearly 60px off the board on an iPhone SE. The arrow
+   alone still reads, and the button keeps its accessible name. */
+@media (max-width: 419px) {
+  .topbar { gap: 10px; }
+  .topbar__back-text { display: none; }
 }
 .topbar__title { flex: 1; min-width: 0; text-align: center; }
 .topbar__title h2 {
@@ -372,4 +546,122 @@ body {
     animation-iteration-count: 1 !important;
     transition-duration: .01ms !important;
   }
+}
+
+/* ───────── how to play ───────── */
+
+.rules {
+  margin: 16px 0 0;
+  padding-left: 22px;
+  color: var(--ink-soft);
+  font-size: 15px;
+  text-align: left;
+}
+.rules li { margin-bottom: 10px; }
+.rules b { color: var(--ink); }
+
+/* ───────── settings ───────── */
+
+.settings-list {
+  display: grid;
+  gap: 12px;
+  margin: 20px 0 0;
+  text-align: left;
+}
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border: 2px solid var(--ink);
+  border-radius: 12px;
+  background: var(--paper-warm);
+}
+/* display:flex beats the browser's own [hidden] rule. */
+.settings-row[hidden] { display: none; }
+.settings-row > span {
+  font-family: "Baloo 2", sans-serif;
+  font-weight: 800;
+  font-size: 17px;
+  color: var(--ink);
+}
+
+/* Marked out from the rows that merely toggle something, so nobody reaches
+   for it by accident. It has to come after .settings-row, whose border
+   shorthand would otherwise reset the color set here. */
+.settings-row--danger { border-color: var(--danger); }
+.settings-row--danger > span { color: var(--danger); }
+
+.settings-row--stack { align-items: flex-start; }
+.settings-row--stack > div { flex: 1 1 auto; min-width: 0; }
+.settings-row--stack > div > b {
+  font-family: "Baloo 2", sans-serif;
+  font-weight: 800;
+  font-size: 17px;
+  color: var(--ink);
+  display: block;
+}
+.settings-row__note { margin: 4px 0 0; font-size: 13px; color: var(--ink-soft); }
+
+.settings-row .btn { padding: 8px 16px; min-width: 72px; font-size: 15px; min-height: 40px; }
+
+/* ───────── press and hold to erase ───────── */
+
+.hold {
+  position: relative;
+  display: block;
+  width: 100%;
+  margin: 4px 0 2px;
+  padding: 16px 18px;
+  border: var(--stroke) solid var(--ink);
+  border-radius: 16px;
+  background: var(--paper-warm);
+  box-shadow: 0 5px 0 var(--ink);
+  font: inherit;
+  font-family: "Baloo 2", sans-serif;
+  font-weight: 800;
+  font-size: 19px;
+  color: var(--ink);
+  cursor: pointer;
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: none;          /* holding must not scroll the page instead */
+}
+.hold:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+.hold:active { transform: translateY(3px); box-shadow: 0 2px 0 var(--ink); }
+
+/* The fill is the whole point: it says how much longer, and it is driven
+   from script rather than by a transition so letting go stops it dead
+   rather than animating on to somewhere it never reached. */
+.hold__fill {
+  position: absolute;
+  inset: 0;
+  transform-origin: left center;
+  transform: scaleX(var(--held, 0));
+  background: linear-gradient(90deg, #ff8fb1, var(--danger));
+}
+.hold__label { position: relative; }
+.hold.is-done .hold__fill { background: var(--grass); }
+
+.btn--quiet { font-size: 15px; color: var(--ink-soft); }
+
+/* ───────── short screens ───────── */
+
+/* A phone lying down is the extreme case: the title screen gives up what
+   is decoration — the tiles and the tagline — and keeps the name and the
+   way in, which is what the screen is for. */
+@media (orientation: landscape) and (max-height: 500px) {
+  .masthead__mark,
+  .masthead__tag { display: none; }
+  .masthead { margin: 0 0 14px; }
+  .masthead h1 { font-size: clamp(30px, 5.4vw, 44px); -webkit-text-stroke: 5px var(--ink); text-shadow: 0 5px 0 var(--ink); }
+  .menu-foot { margin-top: 14px; }
+}
+
+@media (max-height: 620px) {
+  .masthead__tag { font-size: 15px; margin-top: 12px; }
+  .masthead { margin-bottom: 16px; }
 }

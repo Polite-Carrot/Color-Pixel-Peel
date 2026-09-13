@@ -145,3 +145,16 @@ export function saveProgress(progress: Progress): void {
 export function savePrefs(progress: Progress): void {
   writeJson(PREFS_KEY, { assist: progress.assist });
 }
+
+/**
+ * Erases progress. The assist preference is left alone: it is a setting
+ * the player chose, not something they earned, and it lives under its own
+ * key precisely so the two can be handled separately.
+ */
+export function resetProgress(): void {
+  try {
+    chosen.store.removeItem(PROGRESS_KEY);
+  } catch {
+    // Nothing to do; the store already reported what it can manage.
+  }
+}

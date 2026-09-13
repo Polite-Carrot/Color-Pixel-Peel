@@ -32,60 +32,163 @@
     </div>
 
     <div class="app">
-      <header class="topbar">
-        <div class="topbar__title">
-          <h2 id="level-name">Level 1</h2>
-          <span id="level-sub">4 × 5 · 3 colors</span>
+      <!-- ─────────────── home ─────────────── -->
+      <section id="screen-home" class="screen is-active">
+        <header class="masthead">
+          <div class="masthead__mark" aria-hidden="true">
+            <span style="--c: #f5423c"></span>
+            <span style="--c: #ffd028"></span>
+            <span style="--c: #3b7bf7"></span>
+          </div>
+          <h1>Color Pixel Peel</h1>
+          <p class="masthead__tag">Peel away the colors and clear the board!</p>
+        </header>
+
+        <div class="choices">
+          <button id="go-play" class="choice" type="button">
+            <span class="choice__stack" aria-hidden="true"><i></i><i></i><i></i></span>
+            <span class="choice__body">
+              <span class="choice__name">Peel Colors</span>
+              <span class="choice__sub" id="home-sub">Start at level 1</span>
+            </span>
+            <span class="choice__go" aria-hidden="true">&rsaquo;</span>
+          </button>
         </div>
-        <div class="topbar__stats">
-          <div class="stat" id="stat-moves-wrap">
-            <b id="stat-moves">0</b>
-            <small>Moves</small>
-          </div>
-          <div class="stat">
-            <b id="stat-score">0</b>
-            <small>Score</small>
-          </div>
-          <div class="stat">
-            <b id="stat-best">0</b>
-            <small>Best</small>
-          </div>
+
+        <p class="status" id="save-warning" hidden></p>
+
+        <div class="menu-foot">
+          <button class="btn btn--quiet" id="go-howto" type="button">How to play</button>
+          <button class="btn btn--quiet" id="go-settings" type="button">Settings</button>
         </div>
-      </header>
+      </section>
 
-      <p class="brief" id="brief">
-        Tap a run of two or more of the same color to peel it and reveal what is underneath.
-      </p>
+      <!-- ─────────────── the board ─────────────── -->
+      <section id="screen-game" class="screen">
+        <header class="topbar">
+          <button class="btn topbar__back" id="btn-menu" type="button" aria-label="Back to menu">
+            <span aria-hidden="true">&larr;</span><span class="topbar__back-text">&nbsp;Menu</span>
+          </button>
+          <div class="topbar__title">
+            <h2 id="level-name">Level 1</h2>
+            <span id="level-sub">4 × 5 · 3 colors</span>
+          </div>
+          <div class="topbar__stats">
+            <div class="stat" id="stat-moves-wrap">
+              <b id="stat-moves">0</b>
+              <small>Moves</small>
+            </div>
+            <div class="stat">
+              <b id="stat-score">0</b>
+              <small>Score</small>
+            </div>
+          </div>
+        </header>
 
-      <main class="board">
-        <canvas id="board" aria-label="Game board"></canvas>
-      </main>
+        <p class="brief" id="brief">
+          Tap a run of two or more of the same color to peel it and reveal what is underneath.
+        </p>
 
-      <p class="status" id="save-warning" hidden></p>
+        <main class="board">
+          <canvas id="board" aria-label="Game board"></canvas>
+        </main>
 
-      <nav class="toolbar">
-        <button class="btn" id="btn-undo" type="button">Undo</button>
-        <button class="btn" id="btn-restart" type="button">Restart</button>
-        <button
-          class="btn"
-          id="btn-assist"
-          type="button"
-          aria-pressed="false"
-          title="Show a letter on every color"
-        >
-          Assist
-        </button>
-      </nav>
+        <nav class="toolbar">
+          <button class="btn" id="btn-undo" type="button">Undo</button>
+          <button class="btn" id="btn-restart" type="button">Restart</button>
+          <button class="btn" id="btn-settings" type="button">Settings</button>
+        </nav>
+      </section>
     </div>
 
+    <!-- ─────────────── the win / stuck card ─────────────── -->
     <div class="overlay" id="overlay" hidden>
       <div class="modal" role="dialog" aria-modal="true" aria-labelledby="overlay-title">
-        <h2 class="modal__title" id="overlay-title">Level clear</h2>
+        <h2 id="overlay-title">Level clear</h2>
         <p class="modal__score" id="overlay-score"></p>
         <p class="modal__line" id="overlay-body"></p>
         <div class="modal__actions">
           <button class="btn btn--primary btn--wide" id="overlay-action" type="button">Next level</button>
           <button class="btn btn--wide" id="overlay-secondary" type="button" hidden>Undo last peel</button>
+          <button class="btn btn--wide btn--quiet" id="overlay-menu" type="button">Menu</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─────────────── how to play ─────────────── -->
+    <div class="overlay" id="overlay-howto" hidden>
+      <div class="modal modal--wide" role="dialog" aria-modal="true" aria-labelledby="howto-title">
+        <h2 id="howto-title">How to play</h2>
+        <ol class="rules">
+          <li>
+            <b>Every cell is a stack of colored layers</b> and you only see the top one.
+          </li>
+          <li>
+            <b>Tap a run of two or more</b> touching cells of the same color. The whole run
+            peels off at once, revealing the colors underneath.
+          </li>
+          <li>
+            <b>A single pixel on its own cannot peel.</b> It needs a neighbour of its own
+            color first.
+          </li>
+          <li>
+            <b>A cell that runs out of layers becomes a hole,</b> and holes break up the runs
+            around them — so the order you peel in matters.
+          </li>
+          <li>
+            <b>Clear every layer</b> before the moves run out. A bigger run scores far more
+            than several small ones, and moves you never spent are worth points too.
+          </li>
+        </ol>
+        <div class="modal__actions">
+          <button class="btn btn--primary btn--wide" id="howto-close" type="button">Got it</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─────────────── settings ─────────────── -->
+    <div class="overlay" id="overlay-settings" hidden>
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+        <h2 id="settings-title">Settings</h2>
+
+        <div class="settings-list">
+          <div class="settings-row">
+            <span>Color Blind Assist</span>
+            <button class="btn" id="set-assist" type="button" aria-pressed="false">Off</button>
+          </div>
+
+          <div class="settings-row settings-row--stack" id="store-row" hidden>
+            <div>
+              <b>Saving progress</b>
+              <p class="settings-row__note" id="store-note"></p>
+            </div>
+          </div>
+
+          <div class="settings-row settings-row--danger">
+            <span>Reset progress</span>
+            <button class="btn" id="set-reset" type="button">Reset</button>
+          </div>
+        </div>
+
+        <!-- Wiping progress asks, and then asks for six seconds of intent. -->
+        <div id="reset-confirm-step" hidden>
+          <p class="modal__line" id="reset-confirm-text"></p>
+          <div class="modal__actions">
+            <button class="btn btn--wide" id="reset-cancel" type="button">Keep my progress</button>
+            <button class="btn btn--wide" id="reset-continue" type="button">Continue</button>
+          </div>
+        </div>
+
+        <div id="reset-hold-step" hidden>
+          <p class="modal__line">Hold the button until the bar fills. Let go and nothing is lost.</p>
+          <button class="hold" id="reset-hold" type="button">
+            <span class="hold__fill" aria-hidden="true"></span>
+            <span class="hold__label" id="reset-hold-label">Press and hold</span>
+          </button>
+        </div>
+
+        <div class="modal__actions">
+          <button class="btn btn--primary btn--wide" id="settings-close" type="button">Done</button>
         </div>
       </div>
     </div>
