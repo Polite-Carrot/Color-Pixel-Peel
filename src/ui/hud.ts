@@ -67,6 +67,11 @@ export class Hud {
     this.tilesWrap.classList.toggle('is-low', n > 0 && n <= NEARLY_DONE);
   }
 
+  /** Just the score, for the same reason. */
+  setScore(n: number): void {
+    this.score.textContent = n.toLocaleString();
+  }
+
   showOverlay(model: OverlayModel, onAction: () => void, onSecondary?: () => void): void {
     this.overlayTitle.textContent = model.title;
     this.overlayScore.textContent = model.score ?? '';

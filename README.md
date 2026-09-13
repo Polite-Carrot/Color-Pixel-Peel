@@ -57,26 +57,31 @@ each tile is drawn as a separate object. The artwork is flat fills on a cool
 grey mount, and the mount is grey rather than white because `white` is a
 playable color and the dog's muzzle vanished against paper.
 
-### Taking tiles is paced at half a second each
+### Blocks count down, several at once
 
-A block of ten counts down over five seconds: one tile leaves every 500ms,
-and the number on the block in the panel drains with it. The block is being
-spent, and spending it should be watchable.
+A block played into the panel does not take anything at once. It sits in its
+slot showing its own number and counts down — 10, 9, 8 — one tile every
+500ms, and when it reaches zero the slot frees.
 
-The counters tick when a tile **lifts off**, not when it lands. Counting on
-landing made the number lag what was on screen by the length of a flight.
+**Every slot runs its own clock**, so blocks drain side by side. Play a dark
+block and a green one and both eat the picture at the same time, two tiles
+every half second. The panel is a set of countdowns running together rather
+than a queue waiting its turn, and nothing is locked while they run: any free
+slot will take another block.
 
-The rules still resolve the whole play the instant the block goes down —
-this is presentation laid over a finished result, which is why the core stays
-synchronous and testable. While tiles are flying the hand is locked, so plays
-cannot be queued faster than they can be shown; **a tap anywhere skips to the
-end** for anyone who would rather not wait. That tap is caught in the capture
-phase rather than hit-tested against a tile, because a tap into the gap
-between tiles did nothing and left the player stuck watching.
+The number on the block **is** the countdown. An earlier version showed the
+block's original value with a small badge counting down beside it, which put
+the number that mattered in the smaller of the two.
 
-The cost is real and worth knowing: the dog's twelves take six seconds each,
-so a full level is minutes of animation if you watch every one. The interval
-is a single constant in `renderer.ts` if that turns out to be too slow.
+A block whose color has nothing reachable simply waits, its number unmoved,
+and starts counting the moment something opens that color up. Since every
+picture's outline encloses its own fill, that is the normal opening: on the
+Cat only dark can reach anything at all, and green, white and magenta each
+sit there until the outline comes off.
+
+This is a rule rather than a flourish, so the interval lives in `game.ts` and
+the rules take the time as an argument instead of reading a clock — which is
+what lets the tests drive a whole level frame by frame.
 
 ### The deal is shuffled
 
@@ -285,7 +290,7 @@ npm install
 npm run build      # typecheck + bundle src/ into app/
 npm run dev        # rebuild app/ on every save
 npm run serve      # serve the repo root, i.e. the real artifact
-npm test           # 107 unit tests
+npm test           # 109 unit tests
 npm run typecheck
 ```
 

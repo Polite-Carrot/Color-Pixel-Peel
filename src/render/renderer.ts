@@ -20,22 +20,21 @@ export interface DrawOptions {
 }
 
 interface TakeAnim {
-  cells: readonly number[];
+  cell: number;
   color: ColorId;
   start: number;
-  /** Gap between one tile leaving and the next. */
-  stagger: number;
 }
 
-/** How long one tile's flight lasts. Shorter than the interval, so each
- *  is clear of the next. */
-const TAKE_MS = 380;
 /**
- * Half a second between one tile leaving and the next, so a block of ten
- * counts down over five seconds. The pacing is the point — the number on
- * the block is being spent, and it should be watchable.
+ * How long one tile's flight lasts. Shorter than the game's interval
+ * between tiles, so each is clear of the next.
+ *
+ * The pacing itself is not here any more. Tiles are taken one at a time
+ * by the rules, and this only draws the one that just went — so several
+ * blocks draining at once each get their own flights without the
+ * renderer having to know they exist.
  */
-const TILE_INTERVAL_MS = 500;
+const TAKE_MS = 380;
 const MAX_TILE = 64;
 
 /**
@@ -141,42 +140,9 @@ export class Renderer {
     this.layout = computeLayout(this.board, cssWidth, cssHeight);
   }
 
-  /** Queues the fly-away animation for tiles just taken. */
-  addTake(cells: readonly number[], color: ColorId): void {
-    if (cells.length === 0) return;
-    this.anims.push({
-      cells: cells.slice(),
-      color,
-      start: performance.now(),
-      stagger: TILE_INTERVAL_MS,
-    });
-  }
-
-  /**
-   * How many tiles have left the picture. Counted from the moment a tile
-   * lifts off rather than when it lands, because that is when the picture
-   * stops showing it — count them on landing and the number lags what is
-   * on screen by the length of a flight.
-   */
-  get flown(): number {
-    const now = performance.now();
-    let gone = 0;
-    for (const anim of this.anims) {
-      for (let i = 0; i < anim.cells.length; i++) {
-        if (now - anim.start - i * anim.stagger >= 0) gone++;
-      }
-    }
-    return gone;
-  }
-
-  /** Total tiles in flight or still to leave. */
-  get pending(): number {
-    return this.anims.reduce((n, a) => n + a.cells.length, 0);
-  }
-
-  /** Ends every animation at once, for a player who would rather not wait. */
-  finishTakes(): void {
-    this.anims = [];
+  /** Draws one tile flying off, from the moment it was taken. */
+  addTake(cell: number, color: ColorId): void {
+    this.anims.push({ cell, color, start: performance.now() });
   }
 
   clearAnims(): void {
@@ -210,14 +176,12 @@ export class Renderer {
     ctx.clearRect(0, 0, this.layout.width, this.layout.height);
     ctx.lineJoin = 'round';
 
-    this.anims = this.anims.filter(
-      (a) => now - a.start < a.stagger * (a.cells.length - 1) + TAKE_MS,
-    );
+    this.anims = this.anims.filter((a) => now - a.start < TAKE_MS);
 
     this.drawCard();
     for (let i = 0; i < this.board.tiles.length; i++) this.drawTile(i, options);
 
-    for (const anim of this.anims) this.drawTakenTiles(anim, now);
+    for (const anim of this.anims) this.drawTakenTile(anim, now);
   }
 
   /**
@@ -282,49 +246,31 @@ export class Renderer {
   }
 
   /**
-   * Tiles a block just took, leaving one after another.
-   *
-   * Each waits its turn drawn in place — so the picture still shows it —
-   * and then flies toward the panel it was played into, shrinking and
-   * fading. A block of twelve therefore reads as twelve tiles being
-   * taken rather than a dozen vanishing at once.
+   * A tile that has just been taken, flying toward the panel as it
+   * shrinks and turns. One per tile, started when the rules actually
+   * removed it, so what is on screen and what the counters say cannot
+   * drift apart.
    */
-  private drawTakenTiles(anim: TakeAnim, now: number): void {
+  private drawTakenTile(anim: TakeAnim, now: number): void {
     const { ctx } = this;
-    const elapsed = now - anim.start;
-    const hex = swatch(anim.color).hex;
+    const t = easeOut(Math.min(1, (now - anim.start) / TAKE_MS));
+    const { x, y, size } = this.cellRect(anim.cell);
 
-    // Where they fly to: the panel, which sits below the picture.
+    // Toward the panel, which sits below the picture.
     const toX = this.layout.width / 2;
     const toY = this.layout.height + this.layout.tile * 2;
 
-    for (const [i, cell] of anim.cells.entries()) {
-      const local = elapsed - i * anim.stagger;
-      if (local < 0) {
-        // Not its turn yet: still part of the picture.
-        const { x, y, size } = this.cellRect(cell);
-        ctx.fillStyle = hex;
-        roundRect(ctx, x, y, size, size, size * 0.18);
-        ctx.fill();
-        continue;
-      }
-      if (local >= TAKE_MS) continue;
+    const cx = x + size / 2 + (toX - (x + size / 2)) * t * 0.55;
+    const cy = y + size / 2 + (toY - (y + size / 2)) * t * 0.55;
+    const scale = 1 - 0.55 * t;
 
-      const t = easeOut(local / TAKE_MS);
-      const { x, y, size } = this.cellRect(cell);
-      const cx = x + size / 2 + (toX - (x + size / 2)) * t * 0.55;
-      const cy = y + size / 2 + (toY - (y + size / 2)) * t * 0.55;
-      const scale = 1 - 0.55 * t;
-
-      ctx.save();
-      ctx.globalAlpha = 1 - t;
-      ctx.translate(cx, cy);
-      ctx.rotate(t * 0.5);
-      ctx.fillStyle = hex;
-      roundRect(ctx, (-size * scale) / 2, (-size * scale) / 2, size * scale, size * scale, size * 0.18 * scale);
-      ctx.fill();
-      ctx.restore();
-    }
+    ctx.save();
+    ctx.globalAlpha = 1 - t;
+    ctx.translate(cx, cy);
+    ctx.rotate(t * 0.5);
+    ctx.fillStyle = swatch(anim.color).hex;
+    roundRect(ctx, (-size * scale) / 2, (-size * scale) / 2, size * scale, size * scale, size * 0.18 * scale);
+    ctx.fill();
     ctx.restore();
   }
 }

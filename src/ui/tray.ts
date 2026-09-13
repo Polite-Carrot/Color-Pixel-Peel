@@ -43,13 +43,13 @@ export class Tray {
   }
 
   /**
-   * Just one slot's number, for the per-frame countdown while its tiles
-   * fly. Rewriting the whole hand each frame would throw away focus and
-   * cost a DOM rebuild sixty times a second.
+   * Just one slot's number. Blocks tick down twice a second, and
+   * rebuilding the whole hand for each tick would throw away focus and
+   * cost a DOM rebuild for nothing.
    */
   setSlotCount(slot: number, n: number): void {
-    const owed = this.panel.children[slot]?.querySelector('.chip__owed');
-    if (owed) owed.textContent = String(n);
+    const chip = this.panel.children[slot]?.querySelector('.chip--slot');
+    if (chip) chip.textContent = String(n);
   }
 
   render(model: TrayModel): void {
@@ -65,13 +65,15 @@ export class Tray {
         );
 
         if (slot.block) {
+          /* The number ON the block is what is left to take, so the block
+             itself is the countdown. It used to show the block's original
+             value with a small badge counting down beside it, which put
+             the number that mattered in the smaller of the two. */
           const chip = document.createElement('span');
           chip.className = 'chip chip--slot';
-          this.paint(chip, slot.block);
-          const owed = document.createElement('span');
-          owed.className = 'chip__owed';
-          owed.textContent = String(slot.remaining);
-          chip.append(owed);
+          chip.style.background = swatch(slot.block.color).hex;
+          chip.style.color = solidInk(slot.block.color);
+          chip.textContent = String(slot.remaining);
           cell.append(chip);
         }
         return cell;

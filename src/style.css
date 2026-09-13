@@ -910,22 +910,7 @@ body {
   height: 100%;
   box-shadow: none;
   border-width: 2px;
-  font-size: 18px;
-}
-
-/* Sits on a slot's block to say how many tiles it is still owed. */
-.chip__owed {
-  position: absolute;
-  right: -5px;
-  bottom: -6px;
-  min-width: 19px;
-  padding: 0 3px;
-  border: 2px solid var(--ink);
-  border-radius: 9px;
-  background: var(--gold);
-  color: var(--ink);
-  font-size: 12px;
-  line-height: 15px;
+  font-size: 20px;
 }
 
 /* Short screens shrink the hand before the picture gives up more. */

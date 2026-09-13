@@ -12,31 +12,50 @@ import type { ColorId } from './palette';
 
 export type GameStatus = 'playing' | 'won' | 'stuck';
 
-/** A panel slot: empty, or holding a block with tiles still owed. */
-export interface Slot {
-  block: Block | null;
-  /** How much of the block's count is still to be taken. */
-  remaining: number;
-}
+/**
+ * How long one tile takes. A block of ten counts down 10, 9, 8 over five
+ * seconds — this is a rule of the game rather than a flourish, which is
+ * why it lives here and not in the renderer.
+ */
+export const TILE_INTERVAL_MS = 500;
 
 /** Points per tile taken off the picture. */
 export const TILE_SCORE = 10;
 /** Paid for finishing the picture. */
 export const CLEAR_BONUS = 500;
 
+/**
+ * A panel slot. A block sits here eating tiles of its color one at a
+ * time, and the number shown on it is `remaining` — so a block is a
+ * countdown you can watch rather than a thing that vanishes.
+ *
+ * Every slot runs its own clock, so several blocks drain at once.
+ */
+export interface Slot {
+  block: Block | null;
+  /** Tiles still owed. Zero means the block is spent and the slot frees. */
+  remaining: number;
+  /** When this slot may take its next tile. */
+  nextAt: number;
+}
+
 export type PlaceOutcome =
   | { kind: 'ignored'; reason: 'no-free-slot' | 'no-such-block' | 'finished' }
-  | {
-      kind: 'placed';
-      slot: number;
-      block: Block;
-      /** Tiles taken as a result, including any freed by the cascade. */
-      taken: readonly number[];
-      points: number;
-      /** True when the block could not be fully spent and is now waiting. */
-      pending: boolean;
-      status: GameStatus;
-    };
+  | { kind: 'placed'; slot: number; block: Block };
+
+/** One tile leaving the picture, and which slot spent it. */
+export interface TakenTile {
+  cell: number;
+  color: ColorId;
+  slot: number;
+}
+
+export interface TickOutcome {
+  /** Tiles taken this tick — at most one per draining slot. */
+  taken: readonly TakenTile[];
+  points: number;
+  status: GameStatus;
+}
 
 interface Snapshot {
   board: Board;
@@ -48,8 +67,9 @@ interface Snapshot {
 const HISTORY_LIMIT = 64;
 
 /**
- * Owns all mutable game state. Free of DOM and rendering so the rules can
- * be tested headlessly.
+ * Owns all mutable game state. Free of DOM and rendering, and given the
+ * time rather than reading a clock, so the rules can be tested by driving
+ * them frame by frame.
  */
 export class Game {
   private _def: LevelDef;
@@ -71,7 +91,7 @@ export class Game {
   }
 
   private static emptySlots(n: number): Slot[] {
-    return Array.from({ length: n }, () => ({ block: null, remaining: 0 }));
+    return Array.from({ length: n }, () => ({ block: null, remaining: 0, nextAt: 0 }));
   }
 
   get level(): LevelDef {
@@ -83,20 +103,12 @@ export class Game {
   get board(): Board {
     return this._board;
   }
-  /**
-   * The hand, as columns. Only `column[0]` of each can be played — the
-   * rest are visible but waiting behind it.
-   */
   get columns(): readonly (readonly Block[])[] {
     return this._columns;
   }
-
-  /** The playable block of each column, or null where a column is spent. */
   get fronts(): readonly (Block | null)[] {
     return frontBlocks(this._columns);
   }
-
-  /** Every block still in hand, playable or not. */
   get blocksLeft(): readonly Block[] {
     return remainingBlocks(this._columns);
   }
@@ -119,108 +131,13 @@ export class Game {
     return this._index >= LEVEL_COUNT;
   }
 
-  private freeSlotIndex(): number {
-    return this._slots.findIndex((s) => s.block === null);
+  /** True while any block still owes tiles. */
+  get isDraining(): boolean {
+    return this._slots.some((s) => s.block !== null && s.remaining > 0);
   }
 
-  /** Whether a waiting block has anything it could take right now. */
-  private canProgress(): boolean {
-    return this._slots.some(
-      (s) => s.block !== null && s.remaining > 0 && accessibleOf(this._board, s.block.color).length > 0,
-    );
-  }
-
-  /**
-   * Plays the front block of `column` into the first free slot.
-   *
-   * A block takes what it can immediately. If fewer tiles of its color
-   * are reachable than it asks for, it takes those and **waits** in its
-   * slot for the rest — which is what makes the slots worth something:
-   * a block that cannot finish ties one up until the picture opens.
-   */
-  place(column: number): PlaceOutcome {
-    if (this._status !== 'playing') return { kind: 'ignored', reason: 'finished' };
-
-    const stack = this._columns[column];
-    const block = stack?.[0];
-    if (!stack || !block) return { kind: 'ignored', reason: 'no-such-block' };
-
-    /* A safety net rather than a live path: the cascade lets every slot
-       take what it can, so a slot still holding a block has nothing
-       available — which means filling the last one sets 'stuck' below and
-       the guard above catches the next play first. Kept so a future change
-       to resolution cannot corrupt the slots silently. */
-    const slotIndex = this.freeSlotIndex();
-    if (slotIndex === -1) return { kind: 'ignored', reason: 'no-free-slot' };
-
-    this.pushHistory();
-
-    this._columns = this._columns.map((c, i) => (i === column ? c.slice(1) : c));
-    this._slots = this._slots.map((s, i) =>
-      i === slotIndex ? { block, remaining: block.count } : s,
-    );
-
-    const taken = this.resolve();
-    const points = taken.length * TILE_SCORE;
-    this._score += points;
-
-    let bonus = 0;
-    if (isCleared(this._board)) {
-      this._status = 'won';
-      bonus = CLEAR_BONUS;
-      this._score += bonus;
-    } else if (this.freeSlotIndex() === -1 && !this.canProgress()) {
-      // Every slot is tied up by a block with nothing to take.
-      this._status = 'stuck';
-    } else if (this.blocksLeft.length === 0 && !this.canProgress()) {
-      // Nothing left to play and nothing waiting can move.
-      this._status = 'stuck';
-    }
-
-    const slot = this._slots[slotIndex] as Slot;
-
-    return {
-      kind: 'placed',
-      slot: slotIndex,
-      block,
-      taken,
-      points: points + bonus,
-      pending: slot.block !== null && slot.remaining > 0,
-      status: this._status,
-    };
-  }
-
-  /**
-   * Lets every waiting block take what it can, repeatedly.
-   *
-   * One removal can expose tiles a different slot was waiting on, so this
-   * runs until nothing moves — a single placement can cascade.
-   */
-  private resolve(): number[] {
-    const taken: number[] = [];
-    let progressed = true;
-
-    while (progressed) {
-      progressed = false;
-
-      for (const [i, slot] of this._slots.entries()) {
-        if (slot.block === null || slot.remaining === 0) continue;
-
-        const result = takeColor(this._board, slot.block.color, slot.remaining);
-        if (result.taken.length === 0) continue;
-
-        this._board = result.board;
-        taken.push(...result.taken);
-        progressed = true;
-
-        const remaining = slot.remaining - result.taken.length;
-        this._slots = this._slots.map((s, j) =>
-          j === i ? (remaining === 0 ? { block: null, remaining: 0 } : { block: s.block, remaining }) : s,
-        );
-      }
-    }
-
-    return taken;
+  get hasFreeSlot(): boolean {
+    return this._slots.some((s) => s.block === null);
   }
 
   /** How many tiles of a color are reachable right now. */
@@ -228,12 +145,112 @@ export class Game {
     return accessibleOf(this._board, color).length;
   }
 
-  undo(): boolean {
+  private freeSlotIndex(): number {
+    return this._slots.findIndex((s) => s.block === null);
+  }
+
+  /** Whether any slot could take a tile if its turn came round. */
+  private canProgress(): boolean {
+    return this._slots.some(
+      (s) => s.block !== null && s.remaining > 0 && accessibleOf(this._board, s.block.color).length > 0,
+    );
+  }
+
+  /**
+   * Puts the front block of `column` into the first free slot.
+   *
+   * It takes nothing yet — it starts counting down from its own number,
+   * a tile every {@link TILE_INTERVAL_MS}. Playing does not wait for
+   * anything else to finish, so several blocks drain side by side.
+   */
+  place(column: number, now: number): PlaceOutcome {
+    if (this._status !== 'playing') return { kind: 'ignored', reason: 'finished' };
+
+    const stack = this._columns[column];
+    const block = stack?.[0];
+    if (!stack || !block) return { kind: 'ignored', reason: 'no-such-block' };
+
+    const slotIndex = this.freeSlotIndex();
+    if (slotIndex === -1) return { kind: 'ignored', reason: 'no-free-slot' };
+
+    this.pushHistory();
+
+    this._columns = this._columns.map((c, i) => (i === column ? c.slice(1) : c));
+    this._slots = this._slots.map((s, i) =>
+      i === slotIndex
+        ? // Held at its full number for one interval, so the count is
+          // seen starting from what the block said.
+          { block, remaining: block.count, nextAt: now + TILE_INTERVAL_MS }
+        : s,
+    );
+
+    return { kind: 'placed', slot: slotIndex, block };
+  }
+
+  /**
+   * Advances every slot that is due, taking one tile each.
+   *
+   * Slots are checked in order, so when two want the same tile the lower
+   * slot gets it — arbitrary but consistent. A slot whose color has
+   * nothing reachable simply waits and tries again next interval.
+   */
+  tick(now: number): TickOutcome {
+    if (this._status !== 'playing') {
+      return { taken: [], points: 0, status: this._status };
+    }
+
+    const taken: TakenTile[] = [];
+    const slots = this._slots.map((s) => ({ ...s }));
+
+    for (const [i, slot] of slots.entries()) {
+      if (slot.block === null || slot.remaining === 0) continue;
+      if (now < slot.nextAt) continue;
+
+      const result = takeColor(this._board, slot.block.color, 1);
+      slot.nextAt = now + TILE_INTERVAL_MS;
+
+      const cell = result.taken[0];
+      if (cell === undefined) continue; // nothing reachable; wait it out
+
+      this._board = result.board;
+      taken.push({ cell, color: slot.block.color, slot: i });
+      slot.remaining -= 1;
+
+      if (slot.remaining === 0) {
+        slot.block = null;
+        slot.nextAt = 0;
+      }
+    }
+
+    this._slots = slots;
+
+    let points = taken.length * TILE_SCORE;
+    this._score += points;
+
+    if (isCleared(this._board)) {
+      this._status = 'won';
+      points += CLEAR_BONUS;
+      this._score += CLEAR_BONUS;
+    } else if (!this.canProgress() && !(this.hasFreeSlot && this.blocksLeft.length > 0)) {
+      // Nothing is eating the picture and nothing can be played at it.
+      this._status = 'stuck';
+    }
+
+    return { taken, points, status: this._status };
+  }
+
+  /** Steps back to before the last block was played, timers and all. */
+  undo(now: number): boolean {
     const prev = this._history.pop();
     if (!prev) return false;
+
     this._board = prev.board;
     this._columns = prev.columns;
-    this._slots = prev.slots;
+    // Restored timers are stale, so anything still draining restarts its
+    // interval rather than firing a burst to catch up.
+    this._slots = prev.slots.map((s) =>
+      s.block !== null && s.remaining > 0 ? { ...s, nextAt: now + TILE_INTERVAL_MS } : { ...s },
+    );
     this._score = prev.score;
     this._status = 'playing';
     return true;

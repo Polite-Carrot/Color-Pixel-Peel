@@ -1,7 +1,6 @@
 import './style.css';
 
 import { Game } from './core/game';
-import type { Block } from './core/blocks';
 import { tileAt } from './core/board';
 import { LEVEL_COUNT } from './core/levels';
 import type { ColorId } from './core/palette';
@@ -18,7 +17,6 @@ import {
 import { attachPointer } from './input/pointer';
 import { Renderer } from './render/renderer';
 import { Hud } from './ui/hud';
-import type { Slot } from './core/game';
 import { Tray } from './ui/tray';
 import * as modal from './ui/modal';
 import { Screens } from './ui/screens';
@@ -98,26 +96,8 @@ function boot(): void {
 
   let assist = progress.assist;
   let highlight: ColorId | null = null;
-  /* While tiles are flying, the counters show the play part-way through
-     rather than already finished. The model resolved the whole play the
-     moment the block was put down — this is presentation over the top of
-     it, which is why the rules stay synchronous and testable. */
-  let flight: { slot: number; block: Block; taken: number; tilesAfter: number } | null = null;
   let frame = 0;
   let overlayTimer: number | undefined;
-
-  /**
-   * The panel as it should look right now: mid-flight, the block still
-   * sits in its slot with its number draining, because the tiles it is
-   * spending have not all left the picture yet.
-   */
-  const displaySlots = (): readonly Slot[] => {
-    if (!flight) return game.slots;
-    const left = Math.max(0, flight.block.count - renderer.flown);
-    return game.slots.map((slot, i) =>
-      i === flight?.slot ? { block: flight.block, remaining: Math.max(slot.remaining, left) } : slot,
-    );
-  };
 
   const syncHud = (): void => {
     briefEl.textContent = game.level.brief;
@@ -125,13 +105,13 @@ function boot(): void {
       level: game.levelIndex,
       name: game.level.name,
       score: game.score,
-      tilesLeft: game.tilesLeft + (flight ? flight.taken - renderer.flown : 0),
+      tilesLeft: game.tilesLeft,
       canUndo: game.canUndo,
     });
     tray.render({
       columns: game.columns,
-      slots: displaySlots(),
-      playable: game.status === 'playing' && flight === null,
+      slots: game.slots,
+      playable: game.status === 'playing' && game.hasFreeSlot,
     });
   };
 
@@ -139,56 +119,54 @@ function boot(): void {
     screens.updateHome({ level: progress.unlockedLevel, bestScore: progress.bestScore });
   };
 
+  /**
+   * One frame: let the rules take whatever tiles are due, draw the
+   * result, and keep going while anything is still moving.
+   *
+   * The clock is handed to the rules rather than read inside them, so the
+   * same stepping can be driven frame by frame from a test.
+   */
   const draw = (): void => {
     frame = 0;
+
+    if (game.status === 'playing' && game.isDraining) {
+      const outcome = game.tick(performance.now());
+
+      if (outcome.taken.length > 0) {
+        renderer.setBoard(game.board);
+        for (const tile of outcome.taken) renderer.addTake(tile.cell, tile.color);
+        peelFeedback(outcome.taken.length);
+
+        /* Only the numbers that changed. Blocks tick twice a second and
+           rebuilding the whole hand each time would throw away focus for
+           nothing — but a block finishing empties its slot, which the
+           narrow updates cannot show, so that falls back to a full
+           render. */
+        const finished = outcome.taken.some((t) => game.slots[t.slot]?.block === null);
+        if (finished) {
+          syncHud();
+        } else {
+          hud.setTiles(game.tilesLeft);
+          hud.setScore(game.score);
+          for (const tile of outcome.taken) {
+            tray.setSlotCount(tile.slot, game.slots[tile.slot]?.remaining ?? 0);
+          }
+        }
+      }
+
+      if (outcome.status !== 'playing') {
+        syncHud();
+        window.clearTimeout(overlayTimer);
+        overlayTimer = window.setTimeout(showEndCard, OVERLAY_DELAY_MS);
+      }
+    }
+
     renderer.draw({ assist, highlight });
 
-    if (flight) {
-      // Only the two numbers that change, rather than rebuilding the hand
-      // sixty times a second.
-      const flown = renderer.flown;
-      hud.setTiles(game.tilesLeft + flight.taken - flown);
-      tray.setSlotCount(flight.slot, Math.max(0, flight.block.count - flown));
-      if (!renderer.busy) endFlight();
-    }
-
-    // Keep animating only while something is moving — a phone should not
-    // burn battery on a static board.
-    if (renderer.busy) requestFrame();
+    // Keep the loop running only while something is moving — a phone
+    // should not burn battery on a picture nobody is eating.
+    if (renderer.busy || game.isDraining) requestFrame();
   };
-
-  /** Tiles have all landed: show the real state and let play resume. */
-  const endFlight = (): void => {
-    if (!flight) return;
-    flight = null;
-    syncHud();
-    if (game.status !== 'playing') {
-      window.clearTimeout(overlayTimer);
-      overlayTimer = window.setTimeout(showEndCard, OVERLAY_DELAY_MS);
-    }
-  };
-
-  /** Lets a player who would rather not watch skip to the end. */
-  const skipFlight = (): boolean => {
-    if (!flight) return false;
-    renderer.finishTakes();
-    endFlight();
-    requestFrame();
-    return true;
-  };
-
-  /* A tap anywhere skips the wait, not only one that lands on a tile.
-     Hit-testing the canvas alone meant a tap into the gap between tiles
-     did nothing and the player was stuck watching. Capture phase, so it
-     runs before whatever was actually tapped. */
-  let tapSkipped = false;
-  document.addEventListener(
-    'pointerdown',
-    () => {
-      tapSkipped = skipFlight();
-    },
-    { capture: true },
-  );
 
   const requestFrame = (): void => {
     if (frame !== 0) return;
@@ -213,7 +191,6 @@ function boot(): void {
   };
 
   const refreshBoard = (): void => {
-    flight = null;
     renderer.setBoard(game.board);
     renderer.clearAnims();
     syncHud();
@@ -300,7 +277,7 @@ function boot(): void {
       },
       game.canUndo
         ? () => {
-            game.undo();
+            game.undo(performance.now());
             refreshBoard();
             // One step back out of a dead end can land on another one, so
             // re-check rather than assuming it helped.
@@ -311,36 +288,16 @@ function boot(): void {
   };
 
   const playBlock = (column: number): void => {
-    const outcome = game.place(column);
+    const outcome = game.place(column, performance.now());
 
     if (outcome.kind === 'ignored') {
       rejectFeedback();
       return;
     }
 
-    renderer.setBoard(game.board);
-
-    if (outcome.taken.length === 0) {
-      // Nothing to take: it is sitting in a slot waiting, which is worth
-      // feeling, and there is nothing to animate.
-      rejectFeedback();
-      syncHud();
-      requestFrame();
-      if (outcome.status !== 'playing') {
-        window.clearTimeout(overlayTimer);
-        overlayTimer = window.setTimeout(showEndCard, OVERLAY_DELAY_MS);
-      }
-      return;
-    }
-
-    renderer.addTake(outcome.taken, outcome.block.color);
-    peelFeedback(outcome.taken.length);
-    flight = {
-      slot: outcome.slot,
-      block: outcome.block,
-      taken: outcome.taken.length,
-      tilesAfter: game.tilesLeft,
-    };
+    /* Nothing is taken yet. The block sits in its slot showing its own
+       number and counts down from there, beside whatever else is already
+       draining — several colors eat the picture at once. */
     syncHud();
     requestFrame();
   };
@@ -373,11 +330,6 @@ function boot(): void {
   attachPointer(canvas, (x, y) => renderer.hitTest(x, y), {
     onPress: () => {},
     onTap: (cell) => {
-      // The tap that skipped a flight should not also pick out a color.
-      if (tapSkipped) {
-        tapSkipped = false;
-        return;
-      }
       const color = tileAt(game.board, cell);
       highlight = color === highlight ? null : color;
       requestFrame();
@@ -398,7 +350,7 @@ function boot(): void {
   hud.overlayMenuButton.addEventListener('click', goLevels);
 
   hud.undoButton.addEventListener('click', () => {
-    if (!game.undo()) return;
+    if (!game.undo(performance.now())) return;
     window.clearTimeout(overlayTimer);
     hud.hideOverlay();
     refreshBoard();

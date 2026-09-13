@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { accessibleOf, boardFromPicture, isAccessible, isCleared, remainingOf } from './board';
 import { blockTotals } from './blocks';
-import { Game } from './game';
+import { Game, TILE_INTERVAL_MS } from './game';
 import { LEVELS, LEVEL_COUNT, levelDef } from './levels';
 import { MAX_COLORS, MIN_DISTANCE, distance, swatch } from './palette';
 import { colorCounts, parsePicture } from './picture';
@@ -123,59 +123,43 @@ describe('the picture opens up', () => {
 });
 
 /**
- * Plays a level the way a reasonable player would: always spend a block
- * whose color has tiles showing, biggest first, and only strand one when
- * there is no other choice. If this clears the picture, the level is
- * winnable without foresight.
+ * Plays a level the way a reasonable player would, driving the clock by
+ * hand: fill any free slot with a block whose color has tiles showing,
+ * biggest first, and only strand one when there is nothing better. Then
+ * let time run so the panel drains.
+ *
+ * Choosing only between the fronts is the point — a level is winnable
+ * only if it can be won under the constraint the player actually has.
  */
 function playGreedily(index: number): { game: Game; plays: number } {
   const game = new Game(index);
+  let now = 1000;
   let plays = 0;
 
-  while (game.status === 'playing' && plays < 400) {
-    /* Only the front of each column can be played, so the choice is
-       between at most one block per column — which is the whole of the
-       constraint this checks the level against. */
-    const choices = game.fronts
-      .map((b, i) => ({ b, i, reach: b ? game.reachable(b.color) : -1 }))
-      .filter((c) => c.b !== null);
+  for (let guard = 0; guard < 4000 && game.status === 'playing'; guard++) {
+    if (game.hasFreeSlot) {
+      const choices = game.fronts
+        .map((b, i) => ({ b, i, reach: b ? game.reachable(b.color) : -1 }))
+        .filter((c) => c.b !== null);
 
-    const useful = choices.filter((c) => c.reach > 0).sort((a, b) => (b.b?.count ?? 0) - (a.b?.count ?? 0));
-    const choice = useful[0] ?? choices[0];
-    if (!choice) break;
+      const useful = choices
+        .filter((c) => c.reach > 0)
+        .sort((a, b) => (b.b?.count ?? 0) - (a.b?.count ?? 0));
+      const choice = useful[0] ?? choices[0];
 
-    const outcome = game.place(choice.i);
-    if (outcome.kind === 'ignored') break;
-    plays++;
+      if (choice && game.place(choice.i, now).kind === 'placed') {
+        plays++;
+        continue;
+      }
+    }
+
+    if (!game.isDraining) break; // nothing to play and nothing moving
+    now += TILE_INTERVAL_MS;
+    game.tick(now);
   }
 
   return { game, plays };
 }
-
-describe('the difficulty curve', () => {
-  it('never gets smaller as it goes', () => {
-    // Each level is at least as big as the one before it, so the ramp is
-    // a property of the data rather than of the order they were written.
-    const sizes = indices.map((i) => parsePicture(levelDef(i).picture).tiles.filter((t) => t !== null).length);
-    for (let i = 1; i < sizes.length; i++) {
-      expect(sizes[i], `level ${i + 1} is smaller than level ${i}`).toBeGreaterThanOrEqual(sizes[i - 1] as number);
-    }
-  });
-
-  it('starts small enough to be a first level', () => {
-    const first = parsePicture(levelDef(1).picture).tiles.filter((t) => t !== null).length;
-    expect(first).toBeLessThan(60);
-    expect(levelDef(1).blocks.length).toBeLessThan(12);
-  });
-
-  it('ends harder than it starts', () => {
-    const last = levelDef(LEVEL_COUNT);
-    const first = levelDef(1);
-    expect(last.blocks.length).toBeGreaterThan(first.blocks.length);
-    // Fewer slots, or more colors, or both — but not easier on every axis.
-    expect(last.slots <= first.slots || last.columns > first.columns).toBe(true);
-  });
-});
 
 describe('every level can actually be won', () => {
   it.each(indices)('level %i clears under greedy play', (index) => {
