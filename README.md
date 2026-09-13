@@ -245,21 +245,31 @@ bundles `src/` into `app/app.js` and `app/app.css` with fixed names and no
 sourcemap, and those two files are checked in beside the hand-written
 `index.html`.
 
+Cache-busting comes with it. Fixed filenames mean the URL never changes, so
+a browser holding the old `app.js` goes on serving it — which is exactly what
+happened once: Pages had published the new build and phones were still
+running the previous one. `npm run build` therefore ends by stamping the
+bundle's content hash into the two URLs `index.html` asks for
+(`./app/app.js?v=…`). The path in git stays stable so diffs stay readable,
+and the URL changes whenever the bytes do. `stamp.js` rewrites nothing else
+in the page.
+
 The hazard that creates is obvious: change `src/`, forget to rebuild, and the
 site quietly serves a stale bundle. `.github/workflows/ci.yml` rebuilds on
-every push and fails if `app/` does not match, so it cannot reach `main`
-unnoticed. **After changing anything in `src/`, run `npm run build` and commit
-`app/`.**
+every push and fails if `app/` **or `index.html`** does not match, so it
+cannot reach `main` unnoticed. **After changing anything in `src/`, run
+`npm run build` and commit `app/` and `index.html`.**
 
-Nothing generates or rewrites `index.html`. It is written by hand and every
-reference in it is relative, which is why the same files work at a domain root
-and at `polite-carrot.github.io/Color-Pixel-Peel/` without a `base` setting to
-get wrong.
+`index.html` is written by hand and the build touches only the `?v=` on those
+two URLs. Every reference in it is relative, which is why the same files work
+at a domain root and at `polite-carrot.github.io/Color-Pixel-Peel/` without a
+`base` setting to get wrong.
 
 ### Where things live
 
 ```
 index.html            the page, hand-written — the entry for everything
+stamp.js              puts the bundle's hash in the URLs index.html asks for
 fonts.css             committed: Nunito + Baloo 2, inlined
 favicon.svg
 assets/               the Polite Carrot lockup

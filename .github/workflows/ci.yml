@@ -6,6 +6,10 @@
 # and costs the risk of someone changing src/ without rebuilding, leaving
 # the site quietly serving a stale bundle. The last step below rebuilds
 # and fails if app/ does not match, so that cannot reach main unnoticed.
+#
+# index.html is checked with it: the build stamps the bundle's hash into
+# the URLs it asks for, so a rebuilt bundle with an unstamped page would
+# leave browsers on the cached copy.
 name: CI
 
 on:
@@ -32,9 +36,9 @@ jobs:
       - name: Rebuild and confirm the committed bundle is current
         run: |
           npm run build
-          if ! git diff --quiet -- app; then
-            echo "::error::app/ is out of date. Run 'npm run build' and commit the result."
-            git --no-pager diff --stat -- app
+          if ! git diff --quiet -- app index.html; then
+            echo "::error::app/ or index.html is out of date. Run 'npm run build' and commit the result."
+            git --no-pager diff --stat -- app index.html
             exit 1
           fi
-          echo "app/ matches a fresh build."
+          echo "app/ and index.html match a fresh build."
