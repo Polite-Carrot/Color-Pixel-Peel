@@ -41,14 +41,14 @@
             <span style="--c: #3b7bf7"></span>
           </div>
           <h1>Color Pixel Peel</h1>
-          <p class="masthead__tag">Peel away the colors and clear the board!</p>
+          <p class="masthead__tag">Take the colors off the picture, block by block!</p>
         </header>
 
         <div class="choices">
           <button id="go-play" class="choice" type="button">
             <span class="choice__stack" aria-hidden="true"><i></i><i></i><i></i></span>
             <span class="choice__body">
-              <span class="choice__name">Peel Colors</span>
+              <span class="choice__name">Clear the Picture</span>
               <span class="choice__sub" id="home-sub">Start at level 1</span>
             </span>
             <span class="choice__go" aria-hidden="true">&rsaquo;</span>
@@ -85,8 +85,10 @@
           </div>
         </header>
 
+        <!-- Replaced from the level as soon as the game starts; this is what
+             shows in the meantime, so it has to be true of the game too. -->
         <p class="brief" id="brief">
-          Tap a run of two or more of the same color to peel it and reveal what is underneath.
+          Play a numbered block into the panel and it takes that many tiles of its color off the picture.
         </p>
 
         <main class="board">
@@ -128,23 +130,26 @@
         <h2 id="howto-title">How to play</h2>
         <ol class="rules">
           <li>
-            <b>Every cell is a stack of colored layers</b> and you only see the top one.
+            <b>Every level is a picture</b> made of colored tiles.
           </li>
           <li>
-            <b>Tap a run of two or more</b> touching cells of the same color. The whole run
-            peels off at once, revealing the colors underneath.
+            <b>The blocks below show a color and a number.</b> Play one into the panel and it
+            takes that many tiles of that color off the picture.
           </li>
           <li>
-            <b>A single pixel on its own cannot peel.</b> It needs a neighbour of its own
-            color first.
+            <b>A tile can only be taken if it is reachable</b> — touching a gap, or on the edge
+            of the picture. Tiles walled in by others have to be uncovered first.
           </li>
           <li>
-            <b>A cell that runs out of layers becomes a hole,</b> and holes break up the runs
-            around them — so the order you peel in matters.
+            <b>A block with nothing to take waits in its slot</b> until tiles of its color are
+            uncovered, and the number on it says how many it is still owed.
           </li>
           <li>
-            <b>Clear every layer</b> before the moves run out. A bigger run scores far more
-            than several small ones, and moves you never spent are worth points too.
+            <b>Tie up every slot with blocks that cannot move and there is no way on.</b>
+            Undo a play or start the picture again.
+          </li>
+          <li>
+            <b>Clear every tile</b> to finish the picture.
           </li>
         </ol>
         <div class="modal__actions">
