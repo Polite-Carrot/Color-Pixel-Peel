@@ -42,10 +42,13 @@ blocks a level lets you get away with. One removal can expose tiles another
 slot was waiting on, so after every play the panel re-resolves until nothing
 more moves: a single block can cascade.
 
-### Reachability is shown in the hand, not on the picture
+### Nothing says which blocks will work
 
-A block whose color has nothing available is drawn hatched and desaturated.
-That is where the player looks to understand why nothing happened.
+A block that has nothing to take looks exactly like one that does. Working
+that out from the picture **is** the game, so the buttons do not mark the
+answer and neither do their labels — a screen reader is not told what a
+sighted player has to judge. Guessing wrong is a move you are allowed to
+make, and the panel is where you live with it.
 
 An earlier version marked it up on the picture instead — every reachable tile
 raised with an ink outline and a hard shadow. That worked on a board of five
@@ -54,13 +57,44 @@ each tile is drawn as a separate object. The artwork is flat fills on a cool
 grey mount, and the mount is grey rather than white because `white` is a
 playable color and the dog's muzzle vanished against paper.
 
-### Taking tiles is animated one at a time
+### Taking tiles is paced at half a second each
 
-A block of twelve should read as twelve tiles being taken, not a dozen
-vanishing at once. Each tile waits its turn — drawn in place, so the picture
-still shows it — and then flies toward the panel, shrinking and turning as it
-goes. The stagger shrinks as the take grows so even a big block lands inside
-about two thirds of a second.
+A block of ten counts down over five seconds: one tile leaves every 500ms,
+and the number on the block in the panel drains with it. The block is being
+spent, and spending it should be watchable.
+
+The counters tick when a tile **lifts off**, not when it lands. Counting on
+landing made the number lag what was on screen by the length of a flight.
+
+The rules still resolve the whole play the instant the block goes down —
+this is presentation laid over a finished result, which is why the core stays
+synchronous and testable. While tiles are flying the hand is locked, so plays
+cannot be queued faster than they can be shown; **a tap anywhere skips to the
+end** for anyone who would rather not wait. That tap is caught in the capture
+phase rather than hit-tested against a tile, because a tap into the gap
+between tiles did nothing and left the player stuck watching.
+
+The cost is real and worth knowing: the dog's twelves take six seconds each,
+so a full level is minutes of animation if you watch every one. The interval
+is a single constant in `renderer.ts` if that turns out to be too slow.
+
+### The deal is shuffled
+
+The hand is shuffled from the level's seed before it is dealt, and several
+shuffles are tried with the least clumped kept. Dealt in written order, runs
+of one color landed in one column — and a column of nothing but dark does
+nothing whenever dark is buried.
+
+Three things count against a deal: the same color twice in a row down a
+column, a column holding only one color, and the same color repeated across a
+row. That last one was learned from a deal whose three front blocks were all
+red, on a picture whose red is walled in by its own outline — so the opening
+move could not take anything at all, and three slots had to be spent finding
+that out. A repeat in the front row costs four times what one further back
+does.
+
+It is all driven from the seed, so the deal is identical for every player and
+the tests play the real one.
 
 ### The picture stays the same size while you play it
 
@@ -241,7 +275,7 @@ npm install
 npm run build      # typecheck + bundle src/ into app/
 npm run dev        # rebuild app/ on every save
 npm run serve      # serve the repo root, i.e. the real artifact
-npm test           # 96 unit tests
+npm test           # 107 unit tests
 npm run typecheck
 ```
 

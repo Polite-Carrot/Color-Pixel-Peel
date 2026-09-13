@@ -12,8 +12,10 @@ function levelOf(over: Partial<LevelDef>): LevelDef {
     brief: 'test',
     picture: { rows: ['RR'], legend: { R: RED, B: BLUE } },
     slots: 2,
-    // One column, so these tests play the hand in the order written.
+    // One column, so these tests play the hand in the order written —
+    // the shuffle cannot reorder a single column.
     columns: 1,
+    seed: 1,
     blocks: [block(RED, 2)],
     ...over,
   };

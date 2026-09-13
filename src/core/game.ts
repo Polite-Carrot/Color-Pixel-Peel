@@ -65,7 +65,7 @@ export class Game {
     this._index = Math.min(Math.max(1, startLevel), LEVEL_COUNT);
     this._def = levelDef(this._index);
     this._board = boardFromPicture(this._def.picture);
-    this._columns = dealColumns(this._def.blocks, this._def.columns);
+    this._columns = dealColumns(this._def.blocks, this._def.columns, this._def.seed);
     this._slots = Game.emptySlots(this._def.slots);
     this._score = carriedScore;
   }
@@ -241,7 +241,7 @@ export class Game {
 
   restart(): void {
     this._board = boardFromPicture(this._def.picture);
-    this._columns = dealColumns(this._def.blocks, this._def.columns);
+    this._columns = dealColumns(this._def.blocks, this._def.columns, this._def.seed);
     this._slots = Game.emptySlots(this._def.slots);
     this._status = 'playing';
     this._history = [];

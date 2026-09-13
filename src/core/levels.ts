@@ -17,6 +17,13 @@ export interface LevelDef {
    */
   columns: number;
   /**
+   * Seeds the shuffle that deals the hand into columns. Fixed per level so
+   * everyone gets the same deal, and here rather than derived so a level
+   * whose deal turns out awkward can be re-dealt without touching
+   * anything else.
+   */
+  seed: number;
+  /**
    * The hand for this level, in tray order. The counts add up to the
    * picture's tile counts exactly, so a level is cleared by spending
    * every block — there is nothing spare and nothing missing.
@@ -55,6 +62,7 @@ export const LEVELS: readonly LevelDef[] = [
     },
     slots: 5,
     columns: 3,
+    seed: 1013,
     // dark 18, red 22 = 40 tiles.
     blocks: [
       block(DARK, 5),
@@ -88,6 +96,7 @@ export const LEVELS: readonly LevelDef[] = [
     },
     slots: 5,
     columns: 3,
+    seed: 2026,
     // dark 26, yellow 17 = 43 tiles.
     blocks: [
       block(DARK, 6),
@@ -124,6 +133,7 @@ export const LEVELS: readonly LevelDef[] = [
     },
     slots: 5,
     columns: 3,
+    seed: 3039,
     // dark 54, orange 54, white 22, tan 2, magenta 2 = 134 tiles.
     blocks: [
       block(DARK, 12),
@@ -166,6 +176,7 @@ export const LEVELS: readonly LevelDef[] = [
     },
     slots: 4,
     columns: 4,
+    seed: 4052,
     // dark 46, green 75, white 17, magenta 2 = 140 tiles.
     blocks: [
       block(GREEN, 8),

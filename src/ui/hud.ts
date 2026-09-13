@@ -57,6 +57,16 @@ export class Hud {
     this.tilesWrap.classList.toggle('is-low', model.tilesLeft > 0 && model.tilesLeft <= NEARLY_DONE);
   }
 
+  /**
+   * Just the tile count, for the per-frame countdown while tiles fly.
+   * Narrow on purpose: rewriting the whole HUD sixty times a second would
+   * be wasteful, and the rest of it is not changing.
+   */
+  setTiles(n: number): void {
+    this.tiles.textContent = String(n);
+    this.tilesWrap.classList.toggle('is-low', n > 0 && n <= NEARLY_DONE);
+  }
+
   showOverlay(model: OverlayModel, onAction: () => void, onSecondary?: () => void): void {
     this.overlayTitle.textContent = model.title;
     this.overlayScore.textContent = model.score ?? '';

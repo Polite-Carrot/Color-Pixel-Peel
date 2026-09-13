@@ -27,14 +27,15 @@ interface TakeAnim {
   stagger: number;
 }
 
-/** How long one tile takes to fly off. */
-const TAKE_MS = 260;
+/** How long one tile's flight lasts. Shorter than the interval, so each
+ *  is clear of the next. */
+const TAKE_MS = 380;
 /**
- * Tiles leave one after another rather than all at once, so a block of
- * twelve reads as twelve tiles being taken. Scaled down for big takes so
- * the whole run still lands inside {@link MAX_TAKE_MS}.
+ * Half a second between one tile leaving and the next, so a block of ten
+ * counts down over five seconds. The pacing is the point — the number on
+ * the block is being spent, and it should be watchable.
  */
-const MAX_TAKE_MS = 620;
+const TILE_INTERVAL_MS = 500;
 const MAX_TILE = 64;
 
 /**
@@ -143,8 +144,39 @@ export class Renderer {
   /** Queues the fly-away animation for tiles just taken. */
   addTake(cells: readonly number[], color: ColorId): void {
     if (cells.length === 0) return;
-    const stagger = cells.length > 1 ? Math.min(60, MAX_TAKE_MS / cells.length) : 0;
-    this.anims.push({ cells: cells.slice(), color, start: performance.now(), stagger });
+    this.anims.push({
+      cells: cells.slice(),
+      color,
+      start: performance.now(),
+      stagger: TILE_INTERVAL_MS,
+    });
+  }
+
+  /**
+   * How many tiles have left the picture. Counted from the moment a tile
+   * lifts off rather than when it lands, because that is when the picture
+   * stops showing it — count them on landing and the number lags what is
+   * on screen by the length of a flight.
+   */
+  get flown(): number {
+    const now = performance.now();
+    let gone = 0;
+    for (const anim of this.anims) {
+      for (let i = 0; i < anim.cells.length; i++) {
+        if (now - anim.start - i * anim.stagger >= 0) gone++;
+      }
+    }
+    return gone;
+  }
+
+  /** Total tiles in flight or still to leave. */
+  get pending(): number {
+    return this.anims.reduce((n, a) => n + a.cells.length, 0);
+  }
+
+  /** Ends every animation at once, for a player who would rather not wait. */
+  finishTakes(): void {
+    this.anims = [];
   }
 
   clearAnims(): void {

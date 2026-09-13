@@ -1,6 +1,7 @@
 import './style.css';
 
 import { Game } from './core/game';
+import type { Block } from './core/blocks';
 import { tileAt } from './core/board';
 import { LEVEL_COUNT } from './core/levels';
 import type { ColorId } from './core/palette';
@@ -17,6 +18,7 @@ import {
 import { attachPointer } from './input/pointer';
 import { Renderer } from './render/renderer';
 import { Hud } from './ui/hud';
+import type { Slot } from './core/game';
 import { Tray } from './ui/tray';
 import * as modal from './ui/modal';
 import { Screens } from './ui/screens';
@@ -96,8 +98,26 @@ function boot(): void {
 
   let assist = progress.assist;
   let highlight: ColorId | null = null;
+  /* While tiles are flying, the counters show the play part-way through
+     rather than already finished. The model resolved the whole play the
+     moment the block was put down — this is presentation over the top of
+     it, which is why the rules stay synchronous and testable. */
+  let flight: { slot: number; block: Block; taken: number; tilesAfter: number } | null = null;
   let frame = 0;
   let overlayTimer: number | undefined;
+
+  /**
+   * The panel as it should look right now: mid-flight, the block still
+   * sits in its slot with its number draining, because the tiles it is
+   * spending have not all left the picture yet.
+   */
+  const displaySlots = (): readonly Slot[] => {
+    if (!flight) return game.slots;
+    const left = Math.max(0, flight.block.count - renderer.flown);
+    return game.slots.map((slot, i) =>
+      i === flight?.slot ? { block: flight.block, remaining: Math.max(slot.remaining, left) } : slot,
+    );
+  };
 
   const syncHud = (): void => {
     briefEl.textContent = game.level.brief;
@@ -105,14 +125,13 @@ function boot(): void {
       level: game.levelIndex,
       name: game.level.name,
       score: game.score,
-      tilesLeft: game.tilesLeft,
+      tilesLeft: game.tilesLeft + (flight ? flight.taken - renderer.flown : 0),
       canUndo: game.canUndo,
     });
     tray.render({
       columns: game.columns,
-      slots: game.slots,
-      reachable: (b) => game.reachable(b.color),
-      playable: game.status === 'playing',
+      slots: displaySlots(),
+      playable: game.status === 'playing' && flight === null,
     });
   };
 
@@ -123,10 +142,53 @@ function boot(): void {
   const draw = (): void => {
     frame = 0;
     renderer.draw({ assist, highlight });
+
+    if (flight) {
+      // Only the two numbers that change, rather than rebuilding the hand
+      // sixty times a second.
+      const flown = renderer.flown;
+      hud.setTiles(game.tilesLeft + flight.taken - flown);
+      tray.setSlotCount(flight.slot, Math.max(0, flight.block.count - flown));
+      if (!renderer.busy) endFlight();
+    }
+
     // Keep animating only while something is moving — a phone should not
     // burn battery on a static board.
     if (renderer.busy) requestFrame();
   };
+
+  /** Tiles have all landed: show the real state and let play resume. */
+  const endFlight = (): void => {
+    if (!flight) return;
+    flight = null;
+    syncHud();
+    if (game.status !== 'playing') {
+      window.clearTimeout(overlayTimer);
+      overlayTimer = window.setTimeout(showEndCard, OVERLAY_DELAY_MS);
+    }
+  };
+
+  /** Lets a player who would rather not watch skip to the end. */
+  const skipFlight = (): boolean => {
+    if (!flight) return false;
+    renderer.finishTakes();
+    endFlight();
+    requestFrame();
+    return true;
+  };
+
+  /* A tap anywhere skips the wait, not only one that lands on a tile.
+     Hit-testing the canvas alone meant a tap into the gap between tiles
+     did nothing and the player was stuck watching. Capture phase, so it
+     runs before whatever was actually tapped. */
+  let tapSkipped = false;
+  document.addEventListener(
+    'pointerdown',
+    () => {
+      tapSkipped = skipFlight();
+    },
+    { capture: true },
+  );
 
   const requestFrame = (): void => {
     if (frame !== 0) return;
@@ -151,6 +213,7 @@ function boot(): void {
   };
 
   const refreshBoard = (): void => {
+    flight = null;
     renderer.setBoard(game.board);
     renderer.clearAnims();
     syncHud();
@@ -256,16 +319,30 @@ function boot(): void {
     }
 
     renderer.setBoard(game.board);
+
+    if (outcome.taken.length === 0) {
+      // Nothing to take: it is sitting in a slot waiting, which is worth
+      // feeling, and there is nothing to animate.
+      rejectFeedback();
+      syncHud();
+      requestFrame();
+      if (outcome.status !== 'playing') {
+        window.clearTimeout(overlayTimer);
+        overlayTimer = window.setTimeout(showEndCard, OVERLAY_DELAY_MS);
+      }
+      return;
+    }
+
     renderer.addTake(outcome.taken, outcome.block.color);
-    if (outcome.taken.length > 0) peelFeedback(outcome.taken.length);
-    else rejectFeedback(); // it stranded in a slot, which is worth feeling
+    peelFeedback(outcome.taken.length);
+    flight = {
+      slot: outcome.slot,
+      block: outcome.block,
+      taken: outcome.taken.length,
+      tilesAfter: game.tilesLeft,
+    };
     syncHud();
     requestFrame();
-
-    if (outcome.status !== 'playing') {
-      window.clearTimeout(overlayTimer);
-      overlayTimer = window.setTimeout(showEndCard, OVERLAY_DELAY_MS);
-    }
   };
 
   const settings = new Settings({
@@ -296,6 +373,11 @@ function boot(): void {
   attachPointer(canvas, (x, y) => renderer.hitTest(x, y), {
     onPress: () => {},
     onTap: (cell) => {
+      // The tap that skipped a flight should not also pick out a color.
+      if (tapSkipped) {
+        tapSkipped = false;
+        return;
+      }
       const color = tileAt(game.board, cell);
       highlight = color === highlight ? null : color;
       requestFrame();

@@ -11,9 +11,7 @@ function required<T extends HTMLElement>(id: string): T {
 export interface TrayModel {
   columns: readonly (readonly Block[])[];
   slots: readonly Slot[];
-  /** How many tiles of a color are reachable right now. */
-  reachable(block: Block): number;
-  /** False once the level is over. */
+  /** False once the level is over, or while a play is still animating. */
   playable: boolean;
 }
 
@@ -42,6 +40,16 @@ export class Tray {
     el.style.background = swatch(block.color).hex;
     el.style.color = solidInk(block.color);
     el.textContent = String(block.count);
+  }
+
+  /**
+   * Just one slot's number, for the per-frame countdown while its tiles
+   * fly. Rewriting the whole hand each frame would throw away focus and
+   * cost a DOM rebuild sixty times a second.
+   */
+  setSlotCount(slot: number, n: number): void {
+    const owed = this.panel.children[slot]?.querySelector('.chip__owed');
+    if (owed) owed.textContent = String(n);
   }
 
   render(model: TrayModel): void {
@@ -111,16 +119,14 @@ export class Tray {
         this.paint(button, front);
         button.disabled = !model.playable;
 
-        const reach = model.reachable(front);
-        if (reach === 0) button.classList.add('is-stranded');
-
+        /* Deliberately says nothing about whether this block has anything
+           to take. Working that out from the picture is the game; marking
+           the answer on the button would play it for them. The label is
+           silent about it too, so a screen reader is not told what a
+           sighted player has to judge. */
         button.setAttribute(
           'aria-label',
-          `${swatch(front.color).name} ${front.count}` +
-            (reach === 0
-              ? ' — nothing showing, it will wait in the panel'
-              : ` — ${reach} showing`) +
-            `, ${column.length - 1} behind it`,
+          `${swatch(front.color).name} ${front.count}, ${column.length - 1} behind it`,
         );
         button.addEventListener('click', () => this.onPlay(i));
         col.append(button);
