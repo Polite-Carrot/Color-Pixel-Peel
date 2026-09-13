@@ -124,18 +124,34 @@ The board's **← Menu** and the win card's **Menu** both return here.
 
 ### Levels, and the curve
 
-| | Picture | Tiles | Colors | Slots | Columns |
-|--|---------|-------|--------|-------|---------|
-| 1 | Heart | 40 | 2 | 5 | 3 |
-| 2 | Star | 43 | 2 | 5 | 3 |
-| 3 | Good dog | 134 | 5 | 5 | 3 |
-| 4 | Cat | 140 | 4 | 4 | 4 |
+| | Picture | Tiles | Colors | Slots | Columns | Blocks | Sealed at the start |
+|--|---------|-------|--------|-------|---------|--------|---------------------|
+| 1 | Heart | 40 | 2 | 5 | 3 | 9 | 1 of 2 |
+| 2 | Star | 43 | 2 | 5 | 3 | 8 | 0 of 2 |
+| 3 | Fish | 100 | 3 | 5 | 3 | 14 | 2 of 3 |
+| 4 | Rocket | 104 | 6 | 4 | 4 | 12 | 5 of 6 |
+| 5 | House | 127 | 5 | 4 | 4 | 15 | 4 of 5 |
+| 6 | Good dog | 134 | 5 | 4 | 4 | 14 | 4 of 5 |
+| 7 | Cat | 140 | 4 | 3 | 4 | 20 | 3 of 4 |
+| 8 | Butterfly | 168 | 4 | 3 | 5 | 13 | 3 of 4 |
+| 9 | Owl | 188 | 5 | 2 | 5 | 17 | 4 of 5 |
 
-Difficulty is turned with four things and deliberately not with luck: how big
-and tangled the picture is, how many colors it holds, how many slots there are
-to park a mistimed block in, and how many columns the hand is dealt into. The
-first two levels are meant to be walked through; from the third the picture
-buries more of itself and the order blocks come up in starts to matter.
+Difficulty is turned with four things and deliberately not with luck: the size
+and tangle of the picture, how many colors it holds, how many **slots** there
+are to park a block that cannot move yet, and how many columns the hand is
+dealt into.
+
+**Slots are the sharp one**, and the last column of that table is why. Every
+picture is drawn with an outline, and an outline encloses its own fill — so
+most colors start unreachable, and a block spent on one sits in a slot doing
+nothing until the outline comes off. Five slots forgives that freely. The Owl
+gives two: of its five front blocks only the dark one can reach anything at
+all, so either of the other four costs half the panel.
+
+Played greedily — always spending a block whose color is showing, biggest
+first — **every level fills its panel completely at some point**, so the late
+ones leave no margin at all. That is measured rather than asserted: the tests
+play each level under the real constraints and check it can still be won.
 
 ### Levels are balanced, and checked
 
@@ -290,7 +306,7 @@ npm install
 npm run build      # typecheck + bundle src/ into app/
 npm run dev        # rebuild app/ on every save
 npm run serve      # serve the repo root, i.e. the real artifact
-npm test           # 109 unit tests
+npm test           # 164 unit tests
 npm run typecheck
 ```
 
@@ -454,9 +470,12 @@ render smaller.
 - When more tiles of a color are reachable than a block asks for, it takes the
   ones nearest the top-left. That is consistent and predictable but arbitrary —
   if the player should be choosing, this is the rule to change.
-- Four levels. The curve has room in it but the pictures are hand-drawn, and
-  that is the slow part. The picture list is built for more — it wraps to
-  whatever width the window gives and scrolls once there are enough.
+- Nine levels. The picture list is built for more — it wraps to whatever
+  width the window gives and scrolls once there are enough — but the pictures
+  are hand-drawn and that is the slow part.
+- The hardest levels are hard because a wrong block costs a slot, not because
+  they demand precision. A player who could see which colors are reachable
+  would find them straightforward; that information is deliberately withheld.
 - The list shows cleared, next and locked, but no score per level. There is no
   par to measure a run against, so there is nothing honest to put there yet.
 - The hand shows three blocks behind each front one and then a `+n`. A much
