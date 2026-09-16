@@ -14,32 +14,60 @@ import { playGreedily } from './solve';
  * 156 tiles to 748, so a fixed band of "four to seven tiles a block"
  * would cut the Heart into thirty blocks and the Owl into a hundred and
  * fifty. Counting blocks instead means the Heart and the Owl are the same
- * shape of problem, and the Owl is harder because its blocks are bigger
- * and each one commits you for longer.
+ * shape of problem.
  *
- * More blocks is harder: every play is another chance to spend one on a
- * color the picture has not opened up yet. Slots tighten at the same
- * time, so there is less room to park a block that cannot move.
+ * **The panel is the ramp, and the cut follows it.** That is the opposite
+ * of what this used to say, and it is what the measurements forced: how
+ * many blocks a setting can carry is capped by how many slots it gives,
+ * and the cap falls steeply. Against all 100 pictures, dealt and played:
+ *
+ *   5 slots   58 blocks -> 100 of 100 winnable, 70 -> 96
+ *   4 slots   50 blocks -> 100,                 56 -> 98
+ *   3 slots   44 blocks -> 100,                 48 -> 98
+ *   2 slots   44 blocks -> 100,                 48 -> 98
+ *
+ * So blocks cannot rise as slots fall — past the cap the deals simply
+ * stop being winnable. They fall instead, and that is a difficulty story
+ * in its own right: fewer slots **and** bigger blocks both commit you for
+ * longer, so the two levers push the same way rather than fighting.
+ *
+ * So a setting aims for a block **size** and lets the count fall out of
+ * the picture, then clamps that count to the cap. Aiming at the count
+ * directly does not work across a library this wide: fifty-six blocks is
+ * a sensible cut of the 748-tile Owl and an absurd one of the 156-tile
+ * Heart, where it comes out as fifty-six blocks of two or three.
+ *
+ * The cap still bites on the biggest pictures — the Owl at Expert wants
+ * blocks of eleven and gets blocks of eighteen, because forty-two is all
+ * two slots will carry. That is the honest limit of a 748-tile picture,
+ * not something a setting can tune away.
  */
 export interface Setting {
   name: string;
-  /** Roughly how many blocks the picture is cut into, across all colors. */
-  blocks: number;
+  /** The size of block the cut aims for. */
+  blockSize: number;
+  /** Ceiling on the number of blocks — what this slot count can carry. */
+  maxBlocks: number;
   slots: number;
   columns: number;
 }
 
-/* Measured, not guessed. Every one of these was swept against all 100
-   pictures before it was written down: the hard end is where it is
-   because past it the deals stop being winnable at all. Expert at 64
-   blocks left fourteen pictures undealable however often it reseeded. */
+/* Measured, not guessed — the caps are from the sweep above. */
 export const SETTINGS: readonly Setting[] = [
-  { name: 'Gentle', blocks: 20, slots: 5, columns: 3 },
-  { name: 'Easy', blocks: 26, slots: 5, columns: 4 },
-  { name: 'Normal', blocks: 32, slots: 4, columns: 4 },
-  { name: 'Hard', blocks: 38, slots: 3, columns: 4 },
-  { name: 'Expert', blocks: 44, slots: 2, columns: 5 },
+  { name: 'Gentle', blockSize: 7, maxBlocks: 56, slots: 5, columns: 3 },
+  { name: 'Easy', blockSize: 8, maxBlocks: 52, slots: 5, columns: 4 },
+  { name: 'Normal', blockSize: 9, maxBlocks: 50, slots: 4, columns: 4 },
+  { name: 'Hard', blockSize: 10, maxBlocks: 46, slots: 3, columns: 4 },
+  { name: 'Expert', blockSize: 11, maxBlocks: 42, slots: 2, columns: 5 },
 ];
+
+/** No picture is ever one block, however small it is. */
+const FEWEST = 6;
+
+/** How many blocks a setting wants this picture cut into. */
+export function blocksFor(rules: Setting, tiles: number): number {
+  return Math.min(rules.maxBlocks, Math.max(FEWEST, Math.round(tiles / rules.blockSize)));
+}
 
 export const SETTING_COUNT = SETTINGS.length;
 
@@ -179,7 +207,12 @@ export function generateLevel(pictureIndex: number, settingIndex: number, seed: 
     throw new Error(`generateLevel: no picture ${pictureIndex}`);
   }
 
-  const target = setting(settingIndex).blocks;
+  const rules = setting(settingIndex);
+  const tiles = [...colorCounts(parsePicture(picture(pictureIndex))).values()].reduce(
+    (n, c) => n + c,
+    0,
+  );
+  const target = blocksFor(rules, tiles);
 
   for (let attempt = 0; attempt < ATTEMPTS; attempt++) {
     const eased = Math.max(

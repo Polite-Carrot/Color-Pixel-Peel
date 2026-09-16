@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { boardFromPicture, isAccessible } from './board';
 import { blockTotals } from './blocks';
-import { SETTING_COUNT, generateLevel, setting } from './generator';
+import { SETTING_COUNT, blocksFor, generateLevel, setting } from './generator';
 import { LEVEL_COUNT, levelDef, levelSummaries, levelSummary } from './levels';
 import { MIN_DISTANCE, distance, swatch } from './palette';
 import { PICTURES, PICTURE_COUNT, picture } from './pictures';
@@ -69,9 +69,13 @@ describe('the settings', () => {
     for (let i = 1; i < SETTING_COUNT; i++) {
       const prev = setting(i - 1);
       const next = setting(i);
-      // More blocks, so smaller ones, and never more slots.
-      expect(next.blocks).toBeGreaterThan(prev.blocks);
+      /* Fewer slots, and a coarser cut to go with them. Both push the
+         same way: less room to park a block, and each block commits you
+         for longer. The cut follows the panel because it has to — past
+         about fifty blocks at four slots the deals stop being winnable. */
       expect(next.slots).toBeLessThanOrEqual(prev.slots);
+      expect(next.blockSize).toBeGreaterThan(prev.blockSize);
+      expect(next.maxBlocks).toBeLessThan(prev.maxBlocks);
     }
   });
 
@@ -161,32 +165,48 @@ describe('the generator', () => {
       for (const pictureIndex of [0, Math.floor(PICTURE_COUNT / 2), PICTURE_COUNT - 1]) {
         const level = generateLevel(pictureIndex, settingIndex, 11);
         const where = `${level.name} at ${rules.name}`;
-        expect(level.blocks.length, where).toBeGreaterThanOrEqual(rules.blocks * 0.6);
-        expect(level.blocks.length, where).toBeLessThanOrEqual(rules.blocks * 1.6);
+        const want = blocksFor(rules, level.blocks.reduce((n, b) => n + b.count, 0));
+        expect(level.blocks.length, where).toBeGreaterThanOrEqual(want * 0.6);
+        expect(level.blocks.length, where).toBeLessThanOrEqual(want * 1.6);
         expect(level.blocks.every((b) => b.count >= 1), `${where} has an empty block`).toBe(true);
       }
     }
   });
 
-  /* The point of counting blocks rather than sizing them: a picture four
-     times the size is not four times the number of blocks. */
-  it('cuts a big picture into bigger blocks, not more of them', () => {
+  /* What the cap is for. A setting aims at a block size, so a picture
+     four times the size would want four times the blocks — but only as
+     many as its slot count can carry. The smallest picture is nowhere
+     near that ceiling and gets the size it asked for; the largest is held
+     at it and gets bigger blocks instead. */
+  it('caps the cut on a big picture, so its blocks grow instead', () => {
+    const rules = setting(2);
     const small = generateLevel(0, 2, 11);
     const large = generateLevel(PICTURE_COUNT - 1, 2, 11);
-    const tiles = (level: typeof small) =>
-      level.blocks.reduce((n, b) => n + b.count, 0);
+    const tiles = (level: typeof small) => level.blocks.reduce((n, b) => n + b.count, 0);
+    const mean = (level: typeof small) => tiles(level) / level.blocks.length;
 
     expect(tiles(large)).toBeGreaterThan(tiles(small) * 3);
-    expect(large.blocks.length).toBeLessThan(small.blocks.length * 2);
-    const mean = (level: typeof small) => tiles(level) / level.blocks.length;
-    expect(mean(large)).toBeGreaterThan(mean(small) * 2);
+
+    // The small one is under the ceiling, and lands on the size asked for.
+    expect(small.blocks.length).toBeLessThan(rules.maxBlocks);
+    expect(mean(small)).toBeGreaterThan(rules.blockSize - 3);
+    expect(mean(small)).toBeLessThan(rules.blockSize + 3);
+
+    // The big one is held at the ceiling, so its blocks are bigger.
+    expect(large.blocks.length).toBe(rules.maxBlocks);
+    expect(mean(large)).toBeGreaterThan(mean(small));
   });
 
-  it('cuts more blocks as the setting hardens', () => {
-    // The same picture, harder: more blocks and so smaller ones.
-    const gentle = generateLevel(PICTURE_COUNT - 1, 0, 99).blocks.length;
-    const expert = generateLevel(PICTURE_COUNT - 1, SETTING_COUNT - 1, 99).blocks.length;
-    expect(expert).toBeGreaterThan(gentle * 2);
+  it('cuts bigger blocks as the setting hardens', () => {
+    // The same picture, harder: fewer blocks, so each is bigger and holds
+    // a slot for longer.
+    const gentle = generateLevel(PICTURE_COUNT - 1, 0, 99);
+    const expert = generateLevel(PICTURE_COUNT - 1, SETTING_COUNT - 1, 99);
+    const mean = (l: typeof gentle) =>
+      l.blocks.reduce((n, b) => n + b.count, 0) / l.blocks.length;
+
+    expect(expert.blocks.length).toBeLessThan(gentle.blocks.length);
+    expect(mean(expert)).toBeGreaterThan(mean(gentle));
   });
 
   it('refuses a picture it does not have', () => {

@@ -62,10 +62,18 @@ each tile is drawn as a separate object. The artwork is flat fills on a cool
 grey mount, and the mount is grey rather than white because `white` is a
 playable color and the dog's muzzle vanished against paper.
 
+**Nothing is drawn where there is no tile.** There used to be a faint print of
+each empty cell, on the theory that it made progress visible. What it actually
+did was tile the whole card in pale grey squares — and `slate` is a playable
+color, so the background read as tiles the player still had to clear. The
+mount shows through instead, for cells that were never artwork and cells
+already taken alike. Progress is legible anyway, because the picture visibly
+loses pieces.
+
 ### Blocks count down, several at once
 
 A block played into the panel does not take anything at once. It sits in its
-slot showing its own number and counts down — 18, 17, 16 — one tile every
+slot showing its own number and counts down — 12, 11, 10 — one tile every
 180ms, and when it reaches zero the slot frees.
 
 It was 500ms a tile when a picture was 40 to 188 tiles. The artwork is four
@@ -149,29 +157,27 @@ arriving by screen reader has no heading in view to read it from.
 ### Levels, and the curve
 
 The campaign is **generated, not authored**: 100 pictures × 5 settings = 500
-levels. A setting says **how many blocks the picture is cut into** and how much
-room there is to hold one that cannot move yet.
+levels. A setting says what size of block to aim for, how many blocks it will
+allow, and how much room there is to hold one that cannot move yet.
 
-| Setting | Blocks | Slots | Columns | Typical block | Panel peak |
-|---------|--------|-------|---------|---------------|------------|
-| Gentle | 20 | 5 | 3 | 8–27 tiles | 5 |
-| Easy | 26 | 5 | 4 | 6–21 | 5 |
-| Normal | 32 | 4 | 4 | 5–17 | 4 |
-| Hard | 38 | 3 | 4 | 4–14 | 3 |
-| Expert | 44 | 2 | 5 | 4–12 | 2 |
+| Setting | Aims for | At most | Slots | Columns | Panel peak |
+|---------|----------|---------|-------|---------|------------|
+| Gentle | blocks of 7 | 56 blocks | 5 | 3 | 5 |
+| Easy | 8 | 52 | 5 | 4 | 5 |
+| Normal | 9 | 50 | 4 | 4 | 4 |
+| Hard | 10 | 46 | 3 | 4 | 3 |
+| Expert | 11 | 42 | 2 | 5 | 2 |
 
-**A count, not a size.** The pictures run from 156 tiles to 748, so a fixed
-band of "four to seven tiles a block" would cut the Heart into thirty blocks
-and the Owl into a hundred and fifty. Counting blocks instead means the Heart
-and the Owl are the same shape of problem, and the Owl is harder because its
-blocks are bigger and each one commits you for longer. It is also the fix for
-something this README used to list as a known gap: difficulty inside a run no
-longer rides on which picture happened to be large.
+**A size, with a ceiling on the count.** Both halves are needed. Aiming at a
+block count does not survive a library this wide — fifty-six blocks is a
+sensible cut of the 748-tile Owl and an absurd one of the 156-tile Heart,
+where it comes out as fifty-six blocks of two. Aiming at a size alone does not
+survive the slots, for the reason below.
 
 Levels 1–100 are the whole library at Gentle, 101–200 the same pictures at
-Easy, and so on — so the Heart is met four more times, each time cut finer
-with less panel to work with. The Owl, 748 tiles, is 20 blocks and five slots
-at level 100 and **44 blocks and two slots** at level 500.
+Easy, and so on — so the Heart is met four more times, each time with a
+coarser cut and less panel to work with. The Owl, 748 tiles, is 56 blocks and
+five slots at level 100 and **42 blocks and two slots** at level 500.
 
 The settings sweep on the outside and the pictures on the inside on purpose.
 Within a run of 100 the picture is the variable and the pressure is constant,
@@ -189,29 +195,38 @@ spent on one sits in a slot doing nothing until the outline comes off. Five
 slots forgives that freely. Two do not: at Expert, spending one block on a
 sealed color is half the panel gone.
 
-Cutting a picture finer makes it harder twice over. More blocks is more
-chances to spend one early on a color that cannot move, and a smaller block
-buys less of the outline per play — so the picture opens up more slowly at
-exactly the point there is least room to wait.
+**The panel is the ramp, and the cut follows it.** That is the opposite of
+what this README used to say, and the measurements forced it: how many blocks
+a setting can carry is capped by how many slots it gives, and the cap falls
+steeply. So blocks cannot get finer as slots tighten — they get coarser, and
+that turns out to be a difficulty story in its own right. Fewer slots and
+bigger blocks both commit you for longer, so the two levers push the same way
+instead of fighting.
 
 ### The hard end is where the deals stop working
 
-Those numbers are swept, not chosen. Every candidate was dealt against all 100
+The ceilings are swept, not chosen. Every candidate was dealt against all 100
 pictures and played through before it was written down, because past a certain
-point the deals simply stop being winnable:
+point the deals simply stop being winnable at all:
 
-| Expert candidate | Pictures that deal winnable |
-|------------------|------------------------------|
-| 64 blocks, 2 slots | 92 of 100 |
-| 56 blocks, 2 slots | 96 |
-| 48 blocks, 2 slots | 98 |
-| **44 blocks, 2 slots** | **100** |
+| Slots | 100 of 100 winnable at | Starts failing at |
+|-------|------------------------|-------------------|
+| 5 | 58 blocks | 70 → 96 of 100 |
+| 4 | 50 | 56 → 98 |
+| 3 | 44 | 48 → 98 |
+| 2 | 44 | 48 → 98, 64 → 92 |
 
-Two slots and sixty-four blocks leaves eight pictures with no winnable deal at
-all, however often it reseeds — so 64 is not a hard setting, it is a broken
+Two slots and sixty-four blocks leaves eight pictures with no winnable deal
+at all, however often it reseeds — so 64 is not a hard setting, it is a broken
 one. Loosening the solver was tried first and does not help: a chooser that
 prefers blocks the picture can pay in full, so slots free sooner, moved 92 to
 93.
+
+The ceiling is what stops the numbers on the tray getting smaller than they
+are. The Owl at Expert wants blocks of eleven and gets blocks of eighteen,
+because forty-two is all two slots will carry. That is the honest limit of a
+748-tile picture, not something a setting can tune away — and it is the one
+place the finer artwork costs something.
 
 ### Adding a picture adds five levels
 
@@ -651,10 +666,11 @@ render smaller.
   drawing is the slow part — so more artwork is the only thing that makes the
   campaign wider rather than longer.
 - Bigger pictures mean bigger numbers, and there is no way round it. The Owl
-  is 748 tiles cut into 44 blocks, so its blocks are fifteen to twenty-four
-  while the Heart's are six to eight. Getting single figures on the Owl would
-  need a hundred blocks, and 64 already leaves eight pictures with no winnable
-  deal — so the number on a block is set by the artwork, not by taste.
+  is 748 tiles held at 42 blocks by the two-slot ceiling, so its blocks run to
+  the twenties while the Heart's are fives and sixes. Getting single figures
+  on the Owl would need a hundred blocks, and 64 already leaves eight pictures
+  with no winnable deal — so the number on a block is set by the artwork and
+  the panel, not by taste.
 - The library was doubled algorithmically rather than redrawn. Scale2x keeps
   every silhouette and smooths the diagonals, but it cannot add detail that
   was not drawn, so the outlines are two tiles thick and a few small features
