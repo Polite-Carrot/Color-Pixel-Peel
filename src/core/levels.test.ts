@@ -1,175 +1,214 @@
 import { describe, expect, it } from 'vitest';
-import { accessibleOf, boardFromPicture, isAccessible, isCleared, remainingOf } from './board';
+import { boardFromPicture, isAccessible } from './board';
 import { blockTotals } from './blocks';
-import { Game, TILE_INTERVAL_MS } from './game';
-import { LEVELS, LEVEL_COUNT, levelDef } from './levels';
-import { MAX_COLORS, MIN_DISTANCE, distance, swatch } from './palette';
+import { SETTING_COUNT, generateLevel, setting } from './generator';
+import { LEVEL_COUNT, levelDef, levelSummaries, levelSummary } from './levels';
+import { MIN_DISTANCE, distance, swatch } from './palette';
+import { PICTURES, PICTURE_COUNT, picture } from './pictures';
 import { colorCounts, parsePicture } from './picture';
+import { playGreedily } from './solve';
 
-const indices = LEVELS.map((_, i) => i + 1);
+const indices = Array.from({ length: LEVEL_COUNT }, (_, i) => i + 1);
 
-describe('every level', () => {
-  it('has at least one', () => {
-    expect(LEVEL_COUNT).toBeGreaterThan(0);
+describe('the picture library', () => {
+  it('has pictures', () => {
+    expect(PICTURE_COUNT).toBeGreaterThan(0);
   });
 
-  it.each(indices)('level %i parses into a picture with tiles', (index) => {
-    const picture = parsePicture(levelDef(index).picture);
-    expect(picture.tiles.some((t) => t !== null)).toBe(true);
+  it('gives every picture a distinct name', () => {
+    const names = new Set(PICTURES.map((p) => p.name));
+    expect(names.size).toBe(PICTURE_COUNT);
   });
 
-  it.each(indices)('level %i only uses real colors', (index) => {
-    for (const color of colorCounts(parsePicture(levelDef(index).picture)).keys()) {
-      expect(color).toBeGreaterThanOrEqual(0);
-      expect(color).toBeLessThan(MAX_COLORS);
-    }
-  });
+  it.each(PICTURES.map((p, i) => [p.name, i] as const))(
+    '%s has square rows and real colors',
+    (_name, index) => {
+      const art = picture(index);
+      const width = (art.rows[0] as string).length;
+      for (const row of art.rows) expect(row).toHaveLength(width);
 
-  // The balance the whole design rests on: spend every block and the
-  // picture is exactly clear, with nothing spare and nothing missing.
-  it.each(indices)('level %i has blocks that add up to its tiles exactly', (index) => {
-    const def = levelDef(index);
-    const tiles = colorCounts(parsePicture(def.picture));
-    const totals = blockTotals([...def.blocks]);
+      const parsed = parsePicture(art);
+      expect(parsed.tiles.some((t) => t !== null)).toBe(true);
+    },
+  );
 
-    for (const [color, count] of tiles) {
-      expect(totals.get(color), `${swatch(color).name} blocks`).toBe(count);
-    }
-    // And no block for a color the picture does not contain.
-    for (const color of totals.keys()) {
-      expect(tiles.get(color), `${swatch(color).name} tiles`).toBeDefined();
-    }
-  });
-
-  // The rule that actually protects the player: two colors they have to
-  // tell apart must never appear in the same artwork.
-  it.each(indices)('level %i keeps its colors far enough apart to tell apart', (index) => {
-    const colors = [...colorCounts(parsePicture(levelDef(index).picture)).keys()];
-    for (let a = 0; a < colors.length; a++) {
-      for (let b = a + 1; b < colors.length; b++) {
-        const first = colors[a] as number;
-        const second = colors[b] as number;
-        const d = distance(first, second);
-        expect(
-          d,
-          `${swatch(first).name} and ${swatch(second).name} are ${d.toFixed(0)} apart`,
-        ).toBeGreaterThanOrEqual(MIN_DISTANCE);
+  /* The rule that protects the player: two colors they must tell apart
+     never share one picture. Enforced per picture rather than across the
+     palette, since `red` and `tan` sit 142 apart and both are worth
+     keeping. */
+  it.each(PICTURES.map((p, i) => [p.name, i] as const))(
+    '%s keeps its colors far enough apart',
+    (_name, index) => {
+      const colors = [...colorCounts(parsePicture(picture(index))).keys()];
+      for (let a = 0; a < colors.length; a++) {
+        for (let b = a + 1; b < colors.length; b++) {
+          const first = colors[a] as number;
+          const second = colors[b] as number;
+          const d = distance(first, second);
+          expect(d, `${swatch(first).name} and ${swatch(second).name} are ${d.toFixed(0)} apart`)
+            .toBeGreaterThanOrEqual(MIN_DISTANCE);
+        }
       }
+    },
+  );
+
+  it.each(PICTURES.map((p, i) => [p.name, i] as const))(
+    '%s hides something behind its outline',
+    (_name, index) => {
+      // Every picture is drawn with an outline, and an outline encloses
+      // its own fill — which is what makes reaching a color the puzzle.
+      const board = boardFromPicture(picture(index));
+      const walled = board.tiles.filter((t, i) => t !== null && !isAccessible(board, i));
+      expect(walled.length, 'nothing is covered up').toBeGreaterThan(0);
+    },
+  );
+});
+
+describe('the settings', () => {
+  it('gets harder down the list', () => {
+    for (let i = 1; i < SETTING_COUNT; i++) {
+      const prev = setting(i - 1);
+      const next = setting(i);
+      // Smaller blocks, so more of them, and never more slots.
+      expect(next.blockMax).toBeLessThan(prev.blockMax);
+      expect(next.slots).toBeLessThanOrEqual(prev.slots);
     }
   });
 
-  it.each(indices)('level %i says what it is', (index) => {
-    const def = levelDef(index);
-    expect(def.name.length).toBeGreaterThan(0);
-    expect(def.brief.length).toBeGreaterThan(20);
-    // Player-facing copy, so US spelling.
-    expect(def.brief).not.toMatch(/colour/);
+  it('ends far tighter than it starts', () => {
+    const first = setting(0);
+    const last = setting(SETTING_COUNT - 1);
+    expect(last.slots).toBeLessThanOrEqual(Math.floor(first.slots / 2));
   });
 
-  it.each(indices)('level %i gives the panel room to hold a mistake', (index) => {
-    expect(levelDef(index).slots).toBeGreaterThan(1);
+  it('rejects a setting it does not have', () => {
+    expect(() => setting(-1)).toThrow(/no setting/);
+    expect(() => setting(SETTING_COUNT)).toThrow(/no setting/);
+  });
+});
+
+describe('the campaign', () => {
+  it('is every picture at every setting', () => {
+    expect(LEVEL_COUNT).toBe(PICTURE_COUNT * SETTING_COUNT);
   });
 
-  it.each(indices)('level %i offers a real choice of blocks', (index) => {
-    // One column would be a fixed sequence with no decisions in it.
-    expect(levelDef(index).columns).toBeGreaterThan(1);
+  it('sweeps the whole library before hardening', () => {
+    const first = levelSummary(1);
+    const lastOfBand = levelSummary(PICTURE_COUNT);
+    const firstOfNext = levelSummary(PICTURE_COUNT + 1);
+
+    expect(first.setting).toBe(lastOfBand.setting);
+    expect(firstOfNext.setting).not.toBe(first.setting);
+    expect(firstOfNext.name).toBe(first.name);
+  });
+
+  it('brings every picture back at every setting', () => {
+    const byName = new Map<string, Set<string>>();
+    for (const s of levelSummaries()) {
+      const seen = byName.get(s.name) ?? new Set<string>();
+      seen.add(s.setting);
+      byName.set(s.name, seen);
+    }
+    expect(byName.size).toBe(PICTURE_COUNT);
+    for (const [name, settings] of byName) {
+      expect(settings.size, `${name} does not appear at every setting`).toBe(SETTING_COUNT);
+    }
+  });
+
+  it('summarises a level without dealing it', () => {
+    const s = levelSummary(1);
+    expect(s.index).toBe(1);
+    expect(s.name).toBe((PICTURES[0] as { name: string }).name);
+    expect(s.setting).toBe(setting(0).name);
   });
 
   it('rejects a level number it does not have', () => {
     expect(() => levelDef(0)).toThrow(/no level/);
     expect(() => levelDef(LEVEL_COUNT + 1)).toThrow(/no level/);
   });
-});
 
-describe('the picture opens up', () => {
-  it.each(indices)('level %i starts with something reachable', (index) => {
-    const board = boardFromPicture(levelDef(index).picture);
-    const reachable = [...colorCounts(parsePicture(levelDef(index).picture)).keys()].filter(
-      (c) => accessibleOf(board, c).length > 0,
-    );
-    expect(reachable.length).toBeGreaterThan(0);
-  });
-
-  /* The opening levels are meant to be walked through, so nothing being
-     buried in them is correct rather than a gap. From the third on, the
-     picture has to hide something — that is where the panel starts to
-     mean anything. */
-  const CHALLENGING_FROM = 3;
-
-  it.each(indices.filter((i) => i >= CHALLENGING_FROM))(
-    'level %i buries at least one color to begin with',
-    (index) => {
-      const def = levelDef(index);
-      const board = boardFromPicture(def.picture);
-      const colors = [...colorCounts(parsePicture(def.picture)).keys()];
-
-      const buried = colors.filter(
-        (c) => remainingOf(board, c) > 0 && accessibleOf(board, c).length === 0,
-      );
-      expect(buried.length, 'no color starts buried').toBeGreaterThan(0);
-    },
-  );
-
-  it.each(indices)('level %i has tiles that must be uncovered first', (index) => {
-    /* True of every outlined picture, and the reason the rule matters at
-       all: the outline encloses the fill, so the way in is the edge. On
-       the Heart that is the whole lesson — its red is enclosed entirely,
-       so a red block played first has nowhere to go. */
-    const def = levelDef(index);
-    const board = boardFromPicture(def.picture);
-    const walled = board.tiles.filter((t, i) => t !== null && !isAccessible(board, i));
-    expect(walled.length, 'nothing is covered up').toBeGreaterThan(0);
+  it('deals the same level every time', () => {
+    expect(levelDef(7).blocks).toEqual(levelDef(7).blocks);
+    expect(levelDef(7).seed).toBe(levelDef(7).seed);
   });
 });
 
-/**
- * Plays a level the way a reasonable player would, driving the clock by
- * hand: fill any free slot with a block whose color has tiles showing,
- * biggest first, and only strand one when there is nothing better. Then
- * let time run so the panel drains.
- *
- * Choosing only between the fronts is the point — a level is winnable
- * only if it can be won under the constraint the player actually has.
- */
-function playGreedily(index: number): { game: Game; plays: number } {
-  const game = new Game(index);
-  let now = 1000;
-  let plays = 0;
+describe('the generator', () => {
+  it('cuts blocks that add up exactly, at every setting', () => {
+    for (let s = 0; s < SETTING_COUNT; s++) {
+      for (let p = 0; p < PICTURE_COUNT; p++) {
+        const level = generateLevel(p, s, 4242);
+        const tiles = colorCounts(parsePicture(level.picture));
+        const totals = blockTotals(level.blocks);
 
-  for (let guard = 0; guard < 4000 && game.status === 'playing'; guard++) {
-    if (game.hasFreeSlot) {
-      const choices = game.fronts
-        .map((b, i) => ({ b, i, reach: b ? game.reachable(b.color) : -1 }))
-        .filter((c) => c.b !== null);
-
-      const useful = choices
-        .filter((c) => c.reach > 0)
-        .sort((a, b) => (b.b?.count ?? 0) - (a.b?.count ?? 0));
-      const choice = useful[0] ?? choices[0];
-
-      if (choice && game.place(choice.i, now).kind === 'placed') {
-        plays++;
-        continue;
+        for (const [color, count] of tiles) {
+          expect(totals.get(color), `${picture(p).name}/${setting(s).name} ${swatch(color).name}`)
+            .toBe(count);
+        }
+        expect([...totals.keys()].sort()).toEqual([...tiles.keys()].sort());
       }
     }
+  });
 
-    if (!game.isDraining) break; // nothing to play and nothing moving
-    now += TILE_INTERVAL_MS;
-    game.tick(now);
-  }
+  it('keeps blocks inside the setting band, bar the last of a color', () => {
+    const level = generateLevel(PICTURE_COUNT - 1, 0, 11);
+    const rules = setting(0);
+    const oversized = level.blocks.filter((b) => b.count > rules.blockMax);
+    expect(oversized).toHaveLength(0);
+  });
 
-  return { game, plays };
-}
+  it('cuts more blocks as the setting hardens', () => {
+    // The same picture, harder: smaller blocks and so more of them.
+    const gentle = generateLevel(PICTURE_COUNT - 1, 0, 99).blocks.length;
+    const expert = generateLevel(PICTURE_COUNT - 1, SETTING_COUNT - 1, 99).blocks.length;
+    expect(expert).toBeGreaterThan(gentle * 2);
+  });
 
-describe('every level can actually be won', () => {
-  it.each(indices)('level %i clears under greedy play', (index) => {
-    const { game, plays } = playGreedily(index);
+  it('refuses a picture it does not have', () => {
+    expect(() => generateLevel(-1, 0, 1)).toThrow(/no picture/);
+    expect(() => generateLevel(PICTURE_COUNT, 0, 1)).toThrow(/no picture/);
+  });
+});
 
-    expect(game.status, `level ${index} ended ${game.status} with ${game.tilesLeft} tiles left`).toBe('won');
-    expect(isCleared(game.board)).toBe(true);
-    expect(game.blocksLeft).toHaveLength(0);
-    expect(game.slots.every((s) => s.block === null)).toBe(true);
-    expect(plays).toBe(levelDef(index).blocks.length);
-    expect(game.score).toBeGreaterThan(0);
+/* The guarantee the whole generated campaign rests on: a level is only
+   handed over once it has been played through and won. This re-checks
+   every one of them, because a dealt hand is not winnable by
+   construction the way a fixed table would be. */
+describe('every level in the campaign can be won', () => {
+  it.each(indices)('level %i', (index) => {
+    const level = levelDef(index);
+    const run = playGreedily(level);
+
+    expect(run.won, `level ${index} (${level.name}) ended with ${run.tilesLeft} tiles left`).toBe(true);
+    expect(run.plays).toBe(level.blocks.length);
+    expect(run.peakSlots).toBeLessThanOrEqual(level.slots);
+  });
+});
+
+describe('the curve, measured', () => {
+  it('never hands back a slot', () => {
+    const slots = indices.map((i) => levelDef(i).slots);
+    for (let i = 1; i < slots.length; i++) {
+      expect(slots[i]).toBeLessThanOrEqual(slots[i - 1] as number);
+    }
+  });
+
+  it('asks more of the player at the end than at the start', () => {
+    const first = levelDef(1);
+    const last = levelDef(LEVEL_COUNT);
+    expect(last.slots).toBeLessThan(first.slots);
+    expect(last.blocks.length).toBeGreaterThan(first.blocks.length);
+  });
+
+  it('leaves the late levels no room to spare', () => {
+    /* Not a claim about the numbers but about what play feels like: on
+       the hardest setting greedy play fills the panel completely, so a
+       block spent badly is the difference between winning and jamming. */
+    const lastBand = indices.slice(-PICTURE_COUNT);
+    const tight = lastBand.filter((i) => {
+      const level = levelDef(i);
+      return playGreedily(level).peakSlots === level.slots;
+    });
+    expect(tight.length).toBeGreaterThan(lastBand.length / 2);
   });
 });

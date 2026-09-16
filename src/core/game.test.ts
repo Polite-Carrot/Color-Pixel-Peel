@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { CLEAR_BONUS, Game, TILE_INTERVAL_MS, TILE_SCORE } from './game';
 import { isCleared, remainingOf } from './board';
 import { block } from './blocks';
-import { LEVELS, type LevelDef } from './levels';
+import { LEVEL_COUNT, levelDef, type LevelDef } from './levels';
 import { BLUE, RED } from './palette';
 
 /** A hand-made level, so the rules can be pinned without real artwork. */
@@ -26,9 +26,7 @@ function levelOf(over: Partial<LevelDef>): LevelDef {
  * what makes the pacing testable at all.
  */
 function gameOf(def: LevelDef) {
-  const game = new Game(1);
-  (game as unknown as { _def: LevelDef })._def = def;
-  game.restart();
+  const game = new Game(def);
 
   let now = 1000;
   return {
@@ -311,16 +309,17 @@ describe('undo and restart', () => {
 
 describe('the real levels', () => {
   it('starts on level 1 with its own hand, slots and columns', () => {
-    const game = new Game(1);
-    const def = LEVELS[0] as LevelDef;
+    const def = levelDef(1);
+    const game = new Game(def);
     expect(game.level.name).toBe(def.name);
     expect(game.blocksLeft).toHaveLength(def.blocks.length);
     expect(game.slots).toHaveLength(def.slots);
     expect(game.columns).toHaveLength(def.columns);
   });
 
-  it('clamps a level number past the end', () => {
-    expect(new Game(99).levelIndex).toBe(LEVELS.length);
-    expect(new Game(0).levelIndex).toBe(1);
+  it('refuses a level number outside the campaign', () => {
+    // Resolving a number is the campaign's job, not the rules'.
+    expect(() => levelDef(0)).toThrow(/no level/);
+    expect(() => levelDef(LEVEL_COUNT + 1)).toThrow(/no level/);
   });
 });

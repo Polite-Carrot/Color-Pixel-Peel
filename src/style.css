@@ -423,6 +423,17 @@ body {
   color: var(--ink-soft);
 }
 .tile.is-next .tile__name { color: var(--ink); }
+.tile__setting {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  line-height: 1;
+  color: var(--ink-soft);
+}
+.tile.is-next .tile__setting { color: var(--ink); }
+.tile:disabled .tile__setting { color: rgba(43, 33, 66, .4); }
+
 .tile__state { font-size: 12px; line-height: 1; }
 .tile:disabled .tile__name { color: rgba(43, 33, 66, .4); }
 

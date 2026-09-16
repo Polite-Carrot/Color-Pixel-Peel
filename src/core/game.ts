@@ -7,7 +7,7 @@ import {
   takeColor,
 } from './board';
 import { type Block, dealColumns, frontBlocks, remainingBlocks } from './blocks';
-import { type LevelDef, LEVEL_COUNT, levelDef } from './levels';
+import type { LevelDef } from './levels';
 import type { ColorId } from './palette';
 
 export type GameStatus = 'playing' | 'won' | 'stuck';
@@ -73,7 +73,6 @@ const HISTORY_LIMIT = 64;
  */
 export class Game {
   private _def: LevelDef;
-  private _index: number;
   private _board: Board;
   private _columns: Block[][];
   private _slots: Slot[];
@@ -81,9 +80,17 @@ export class Game {
   private _status: GameStatus = 'playing';
   private _history: Snapshot[] = [];
 
-  constructor(startLevel = 1, carriedScore = 0) {
-    this._index = Math.min(Math.max(1, startLevel), LEVEL_COUNT);
-    this._def = levelDef(this._index);
+  /**
+   * Built from a level, never from a level *number*.
+   *
+   * Which level comes next is the campaign's business, not the rules'.
+   * Keeping it out also breaks a cycle that was otherwise unavoidable:
+   * the generator proves a level winnable by playing it, playing needs a
+   * Game, and a Game that resolved level numbers would need the campaign
+   * that was still being built.
+   */
+  constructor(def: LevelDef, carriedScore = 0) {
+    this._def = def;
     this._board = boardFromPicture(this._def.picture);
     this._columns = dealColumns(this._def.blocks, this._def.columns, this._def.seed);
     this._slots = Game.emptySlots(this._def.slots);
@@ -96,9 +103,6 @@ export class Game {
 
   get level(): LevelDef {
     return this._def;
-  }
-  get levelIndex(): number {
-    return this._index;
   }
   get board(): Board {
     return this._board;
@@ -127,10 +131,6 @@ export class Game {
   get tilesLeft(): number {
     return remainingTiles(this._board);
   }
-  get isLastLevel(): boolean {
-    return this._index >= LEVEL_COUNT;
-  }
-
   /** True while any block still owes tiles. */
   get isDraining(): boolean {
     return this._slots.some((s) => s.block !== null && s.remaining > 0);
@@ -262,14 +262,6 @@ export class Game {
     this._slots = Game.emptySlots(this._def.slots);
     this._status = 'playing';
     this._history = [];
-  }
-
-  /** Advances to the next level. Only valid once this one is won. */
-  nextLevel(): void {
-    if (this._status !== 'won' || this.isLastLevel) return;
-    this._index += 1;
-    this._def = levelDef(this._index);
-    this.restart();
   }
 
   private pushHistory(): void {

@@ -2,7 +2,7 @@ import './style.css';
 
 import { Game } from './core/game';
 import { tileAt } from './core/board';
-import { LEVEL_COUNT } from './core/levels';
+import { LEVEL_COUNT, levelDef } from './core/levels';
 import type { ColorId } from './core/palette';
 import {
   DEFAULT_PROGRESS,
@@ -81,7 +81,10 @@ function boot(): void {
   }
 
   let progress: Progress = loadProgress();
-  let game = new Game(progress.unlockedLevel);
+  /* Which level is on screen is the campaign's business, so it lives here
+     rather than inside the rules. */
+  let levelIndex = Math.min(progress.unlockedLevel, LEVEL_COUNT);
+  let game = new Game(levelDef(levelIndex));
   const renderer = new Renderer(canvas, game.board);
   const hud = new Hud();
   const screens = new Screens();
@@ -102,7 +105,7 @@ function boot(): void {
   const syncHud = (): void => {
     briefEl.textContent = game.level.brief;
     hud.update({
-      level: game.levelIndex,
+      level: levelIndex,
       name: game.level.name,
       score: game.score,
       tilesLeft: game.tilesLeft,
@@ -206,8 +209,9 @@ function boot(): void {
 
   /** Starts a level from the picture list, or resumes the current one. */
   const startLevel = (index: number): void => {
-    if (game.levelIndex !== index || game.status !== 'playing') {
-      game = new Game(index, game.score);
+    if (levelIndex !== index || game.status !== 'playing') {
+      levelIndex = index;
+      game = new Game(levelDef(index), game.score);
       renderer.setBoard(game.board);
       renderer.clearAnims();
     }
@@ -233,7 +237,7 @@ function boot(): void {
     if (game.status === 'won') {
       progress = {
         ...progress,
-        unlockedLevel: Math.max(progress.unlockedLevel, Math.min(game.levelIndex + 1, LEVEL_COUNT)),
+        unlockedLevel: Math.max(progress.unlockedLevel, Math.min(levelIndex + 1, LEVEL_COUNT)),
         bestScore: Math.max(progress.bestScore, game.score),
       };
       saveProgress(progress);
@@ -244,14 +248,15 @@ function boot(): void {
           title: 'Picture clear',
           score: game.score.toLocaleString(),
           body: `${game.level.name} — every tile taken.`,
-          actionLabel: game.isLastLevel ? 'Back to the pictures' : 'Next level',
+          actionLabel: levelIndex >= LEVEL_COUNT ? 'Back to the pictures' : 'Next level',
         },
         () => {
-          if (game.isLastLevel) {
+          if (levelIndex >= LEVEL_COUNT) {
             goLevels();
             return;
           }
-          game.nextLevel();
+          levelIndex += 1;
+          game = new Game(levelDef(levelIndex), game.score);
           refreshBoard();
           resize();
         },
@@ -318,7 +323,8 @@ function boot(): void {
     onReset: () => {
       resetProgress();
       progress = { ...DEFAULT_PROGRESS, assist };
-      game = new Game(progress.unlockedLevel);
+      levelIndex = progress.unlockedLevel;
+      game = new Game(levelDef(levelIndex), 0);
       refreshBoard();
       syncHome();
     },

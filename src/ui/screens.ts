@@ -1,4 +1,4 @@
-import { LEVELS, LEVEL_COUNT } from '../core/levels';
+import { LEVEL_COUNT, levelSummaries } from '../core/levels';
 import type { StoreKind } from '../core/storage';
 
 export type ScreenName = 'home' | 'levels' | 'game';
@@ -61,8 +61,8 @@ export class Screens {
     this.progress.textContent = `${done} of ${LEVEL_COUNT} cleared`;
 
     this.grid.replaceChildren(
-      ...LEVELS.map((def, i) => {
-        const index = i + 1;
+      ...levelSummaries().map((summary) => {
+        const index = summary.index;
         const locked = index > reached;
         const isNext = index === reached && index > done;
 
@@ -78,18 +78,22 @@ export class Screens {
 
         const name = document.createElement('span');
         name.className = 'tile__name';
-        name.textContent = def.name;
+        name.textContent = summary.name;
+
+        const band = document.createElement('span');
+        band.className = 'tile__setting';
+        band.textContent = summary.setting;
 
         const state = document.createElement('span');
         state.className = 'tile__state';
         state.textContent = locked ? '🔒' : index < reached ? '✓' : '';
 
-        button.append(no, name, state);
+        button.append(no, name, band, state);
         button.setAttribute(
           'aria-label',
           locked
-            ? `Level ${index}, ${def.name} — locked`
-            : `Level ${index}, ${def.name}${index < reached ? ', cleared' : ''}`,
+            ? `Level ${index}, ${summary.name}, ${summary.setting} — locked`
+            : `Level ${index}, ${summary.name}, ${summary.setting}${index < reached ? ', cleared' : ''}`,
         );
         if (!locked) button.addEventListener('click', () => onPick(index));
 

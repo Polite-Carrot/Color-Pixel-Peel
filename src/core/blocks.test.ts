@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { block, blockTotals, dealColumns, frontBlocks, remainingBlocks } from './blocks';
-import { LEVELS } from './levels';
+import { LEVEL_COUNT, levelDef } from './levels';
 import { BLUE, DARK, RED, YELLOW } from './palette';
 
 describe('blocks', () => {
@@ -70,12 +70,13 @@ describe('dealing into columns', () => {
   });
 
   it('mixes the real levels rather than stacking a color', () => {
-    for (const def of LEVELS) {
+    for (let i = 1; i <= LEVEL_COUNT; i += 7) {
+      const def = levelDef(i);
       const dealt = dealColumns(def.blocks, def.columns, def.seed);
-      for (const [i, column] of dealt.entries()) {
+      for (const [c, column] of dealt.entries()) {
         if (column.length < 2) continue;
         const colors = new Set(column.map((b) => b.color));
-        expect(colors.size, `${def.name} column ${i} is one color`).toBeGreaterThan(1);
+        expect(colors.size, `level ${i} (${def.name}) column ${c} is one color`).toBeGreaterThan(1);
       }
     }
   });
