@@ -21,8 +21,20 @@ const GUARD = 20_000;
  *
  * The strategy is deliberately simple: fill any free slot with the
  * biggest block whose color has tiles showing, and only strand one when
- * there is nothing better on offer. Then let the clock run so the panel
- * drains.
+ * there is nothing better on offer *and nothing left to wait for*. Then
+ * let the clock run so the panel drains.
+ *
+ * That second condition matters more than it looks. Committing a slot to
+ * a color the picture has not opened is irreversible; waiting for a block
+ * already in the panel to finish costs nothing and may open that very
+ * color. A solver that stranded eagerly called the Deer at Hard
+ * unwinnable when it is not.
+ *
+ * "Something to wait for" has to mean a slot that is actually **eating**,
+ * not merely one that still owes tiles. A slot holding a color the
+ * picture has sealed owes tiles it will never be paid, and waiting on
+ * that is waiting forever — the loop below would spin out its whole guard
+ * on every failed deal.
  *
  * It only ever chooses between the **fronts** of the columns, because
  * that is the choice a player actually has. A level the generator cannot
@@ -52,7 +64,9 @@ export function playGreedily(level: LevelDef): Playthrough {
         .filter((c) => game.reachable(c.block.color) > 0)
         .sort((a, b) => b.block.count - a.block.count);
 
-      const choice = reachable[0] ?? offered[0];
+      /* Strand only as a last resort: while a slot is still eating,
+         waiting is free and may uncover the color. */
+      const choice = reachable[0] ?? (game.isEating ? undefined : offered[0]);
 
       if (choice) {
         if (reachable.length === 0) strandedPlays++;

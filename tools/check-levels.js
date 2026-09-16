@@ -29,7 +29,16 @@ let failures = 0;
 
 for (let index = 1; index <= LEVEL_COUNT; index += 1) {
   const summary = levelSummary(index);
-  const def = levelDef(index);
+  /* A level that cannot be dealt at all is a result, not a crash: the
+     point of this tool is to find every one of them in a single pass. */
+  let def;
+  try {
+    def = levelDef(index);
+  } catch (err) {
+    failures += 1;
+    console.log(`${index} ${summary.name} (${summary.setting}): ${(err && err.message) || err}`);
+    continue;
+  }
   const run = playGreedily(def);
   const { tiles, colors, sealed } = survey(def);
   if (!run.won) failures += 1;

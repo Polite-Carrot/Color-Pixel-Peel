@@ -13,11 +13,18 @@ import type { ColorId } from './palette';
 export type GameStatus = 'playing' | 'won' | 'stuck';
 
 /**
- * How long one tile takes. A block of ten counts down 10, 9, 8 over five
- * seconds — this is a rule of the game rather than a flourish, which is
- * why it lives here and not in the renderer.
+ * How long one tile takes. A rule of the game rather than a flourish,
+ * which is why it lives here and not in the renderer.
+ *
+ * It was half a second a tile when a picture was forty to a hundred and
+ * eighty tiles. The artwork is now four times finer — a hundred and fifty
+ * to seven hundred and fifty — and blocks grew with it, so half a second
+ * would leave a block of twenty counting down for ten seconds and the Owl
+ * taking six minutes of animation to clear. At 180ms a typical block
+ * drains in three or four seconds, which is what half a second a tile used
+ * to feel like. The number still visibly counts down; it just runs.
  */
-export const TILE_INTERVAL_MS = 500;
+export const TILE_INTERVAL_MS = 180;
 
 /** Points per tile taken off the picture. */
 export const TILE_SCORE = 10;
@@ -149,7 +156,18 @@ export class Game {
     return this._slots.findIndex((s) => s.block === null);
   }
 
-  /** Whether any slot could take a tile if its turn came round. */
+  /**
+   * Whether any slot could take a tile if its turn came round.
+   *
+   * Different from {@link isDraining}, which is only "some block still
+   * owes tiles". A slot holding a color the picture has sealed away owes
+   * tiles it can never be paid, so waiting on it is waiting forever —
+   * which is why the solver asks this before it decides to wait.
+   */
+  get isEating(): boolean {
+    return this.canProgress();
+  }
+
   private canProgress(): boolean {
     return this._slots.some(
       (s) => s.block !== null && s.remaining > 0 && accessibleOf(this._board, s.block.color).length > 0,

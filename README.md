@@ -65,12 +65,18 @@ playable color and the dog's muzzle vanished against paper.
 ### Blocks count down, several at once
 
 A block played into the panel does not take anything at once. It sits in its
-slot showing its own number and counts down — 10, 9, 8 — one tile every
-500ms, and when it reaches zero the slot frees.
+slot showing its own number and counts down — 18, 17, 16 — one tile every
+180ms, and when it reaches zero the slot frees.
+
+It was 500ms a tile when a picture was 40 to 188 tiles. The artwork is four
+times finer now and blocks grew with it, so half a second each would leave a
+block of twenty counting for ten seconds and the Owl taking six minutes of
+animation to clear. At 180ms a typical block drains in three or four seconds,
+which is what half a second a tile used to feel like — the number still
+visibly counts down, it just runs.
 
 **Every slot runs its own clock**, so blocks drain side by side. Play a dark
-block and a green one and both eat the picture at the same time, two tiles
-every half second. The panel is a set of countdowns running together rather
+block and a green one and both eat the picture at the same time. The panel is a set of countdowns running together rather
 than a queue waiting its turn, and nothing is locked while they run: any free
 slot will take another block.
 
@@ -143,21 +149,29 @@ arriving by screen reader has no heading in view to read it from.
 ### Levels, and the curve
 
 The campaign is **generated, not authored**: 100 pictures × 5 settings = 500
-levels. A setting says how finely the picture is cut into blocks and how much
+levels. A setting says **how many blocks the picture is cut into** and how much
 room there is to hold one that cannot move yet.
 
-| Setting | Block sizes | Slots | Columns | Blocks per level | Panel peak |
-|---------|-------------|-------|---------|------------------|------------|
-| Gentle | 8–14 | 5 | 3 | 9.5 average | 5 |
-| Easy | 6–11 | 5 | 4 | 11.9 average | 5 |
-| Normal | 5–9 | 4 | 4 | 14.4 average | 4 |
-| Hard | 4–7 | 3 | 4 | 18.0 average | 3 |
-| Expert | 3–5 | 2 | 5 | 24.5 average | 2 |
+| Setting | Blocks | Slots | Columns | Typical block | Panel peak |
+|---------|--------|-------|---------|---------------|------------|
+| Gentle | 20 | 5 | 3 | 8–27 tiles | 5 |
+| Easy | 26 | 5 | 4 | 6–21 | 5 |
+| Normal | 32 | 4 | 4 | 5–17 | 4 |
+| Hard | 38 | 3 | 4 | 4–14 | 3 |
+| Expert | 44 | 2 | 5 | 4–12 | 2 |
+
+**A count, not a size.** The pictures run from 156 tiles to 748, so a fixed
+band of "four to seven tiles a block" would cut the Heart into thirty blocks
+and the Owl into a hundred and fifty. Counting blocks instead means the Heart
+and the Owl are the same shape of problem, and the Owl is harder because its
+blocks are bigger and each one commits you for longer. It is also the fix for
+something this README used to list as a known gap: difficulty inside a run no
+longer rides on which picture happened to be large.
 
 Levels 1–100 are the whole library at Gentle, 101–200 the same pictures at
-Easy, and so on — so the Heart is met four more times, each time cut smaller
-with less panel to work with. The Owl, 188 tiles, is 19 blocks and five slots
-at level 100 and **47 blocks and two slots** at level 500.
+Easy, and so on — so the Heart is met four more times, each time cut finer
+with less panel to work with. The Owl, 748 tiles, is 20 blocks and five slots
+at level 100 and **44 blocks and two slots** at level 500.
 
 The settings sweep on the outside and the pictures on the inside on purpose.
 Within a run of 100 the picture is the variable and the pressure is constant,
@@ -175,15 +189,34 @@ spent on one sits in a slot doing nothing until the outline comes off. Five
 slots forgives that freely. Two do not: at Expert, spending one block on a
 sealed color is half the panel gone.
 
-Cutting a picture smaller makes it harder twice over. More blocks is more
+Cutting a picture finer makes it harder twice over. More blocks is more
 chances to spend one early on a color that cannot move, and a smaller block
 buys less of the outline per play — so the picture opens up more slowly at
 exactly the point there is least room to wait.
 
+### The hard end is where the deals stop working
+
+Those numbers are swept, not chosen. Every candidate was dealt against all 100
+pictures and played through before it was written down, because past a certain
+point the deals simply stop being winnable:
+
+| Expert candidate | Pictures that deal winnable |
+|------------------|------------------------------|
+| 64 blocks, 2 slots | 92 of 100 |
+| 56 blocks, 2 slots | 96 |
+| 48 blocks, 2 slots | 98 |
+| **44 blocks, 2 slots** | **100** |
+
+Two slots and sixty-four blocks leaves eight pictures with no winnable deal at
+all, however often it reseeds — so 64 is not a hard setting, it is a broken
+one. Loosening the solver was tried first and does not help: a chooser that
+prefers blocks the picture can pay in full, so slots free sooner, moved 92 to
+93.
+
 ### Adding a picture adds five levels
 
 `src/core/pictures.ts` is the only place artwork lives — 100 pictures, ordered
-smallest first, from a 40-tile Heart to a 188-tile Owl. A picture is rows of
+smallest first, from a 156-tile Heart to a 748-tile Owl. A picture is rows of
 legend characters and a legend mapping them to palette colors, and nothing
 else about it is written by hand — the blocks, the deal and the difficulty all
 come from the setting it is paired with.
@@ -191,7 +224,15 @@ come from the setting it is paired with.
 So the library grows five levels at a time. Adding one to `PICTURES` appends a
 level to each setting's run; `LEVEL_COUNT` follows on its own.
 
-Each is drawn at nine to fifteen tiles across, which is small enough that
+The library was first drawn at nine to fifteen tiles across and then doubled,
+so the pictures are now eighteen to thirty. Doubling is not a zoom: Scale2x
+fills in the diagonal between two matching neighbours instead of leaving a
+staircase, so a shape keeps its silhouette and stops being blocky at four
+times the tile count. That matters because the tiles are what the player takes
+off — a finer picture is a finer puzzle, not just a smoother one.
+
+The drawing rules below are from the original pass, and still hold for
+anything added by hand. At nine to fifteen tiles across
 **flat shapes read and lattices do not**. A first pass drew a bee as wings and
 a thin striped body with dark pixels threaded through it, and at that size it
 came out as noise; the same bee as a solid seven-wide body with three stripes
@@ -217,12 +258,29 @@ which is where the table above comes from:
 
 ```
 500 levels dealt, 500 winnable, 0 not
-498/500 levels drive the panel to full
+500/500 levels drive the panel to full
 ```
 
-The two that do not are the smallest pictures at Gentle, four blocks each and
-five slots to put them in. That is the tutorial working as intended, and every
-level after it runs the panel out.
+Every level now runs the panel out at some point, the openers included — at 20
+blocks even the Heart fills five slots before it is done.
+
+Two things had to be right for that to be true, and neither was:
+
+- **The solver stranded too eagerly.** Told there was nothing reachable, it
+  committed a slot to a sealed color rather than waiting for the panel to
+  drain — which a player would never do, because waiting is free and may
+  uncover that very color. Fixing it turned the Deer at Hard from unwinnable
+  into winnable. "Something to wait for" then had to mean a slot that is
+  actually *eating*, not one that merely still owes tiles: a slot holding a
+  sealed color owes tiles it will never be paid, and the first version of the
+  fix waited on it forever.
+- **A setting is a target, not a promise.** The Deer at Expert is three
+  colors, one of them a muzzle of eight tiles walled in behind the rest, and
+  at two slots holding that one block is half the panel. Cut into 44 blocks
+  almost every deal of it jams. Rather than reseed forever, or drag the whole
+  Expert run down to what its worst picture can take, the generator eases the
+  cut for that picture alone after 30 failed attempts. It is the only level of
+  the five hundred that needs it, and what it buys is the guarantee.
 
 Pass `--all` for the per-level table; without it only the aggregates print,
 because five hundred rows is more than anyone reads at once.
@@ -237,9 +295,11 @@ and a block wasted early is a level that can no longer be finished.
 in one picture sit closer than the distance rule allows, checks the settings
 never soften as the campaign goes on, and plays every level through
 **respecting the column constraint** — only ever choosing between the fronts —
-to prove it can actually be won. The full suite is 883 tests and runs in about
-three seconds, so the campaign is re-proved on every change rather than
-trusted.
+to prove it can actually be won. The full suite is 884 tests. It takes about
+35 seconds now rather than three — dealing and solving 500 levels of four
+times the tiles is most of that — which is why `vite.config.ts` raises
+Vitest's five-second default. Raised rather than sampled: proving every level
+winnable is the point of it.
 
 One rule there is weaker than it looks, and deliberately. The deal is not
 allowed to stack a color, but "no column is ever one color" is not something
@@ -590,11 +650,16 @@ render smaller.
   ceiling on variety the way the settings are the ceiling on length, and
   drawing is the slow part — so more artwork is the only thing that makes the
   campaign wider rather than longer.
-- A setting is uniform across the library. The Heart at Expert (11 blocks) and
-  the Owl at Expert (47) sit in the same band, so the difficulty inside a run
-  of 100 still rises with the picture's size rather than being flat. A setting
-  that scaled its block size to the picture would fix that; it would also make
-  the ramp harder to state, which is why it has not been done yet.
+- Bigger pictures mean bigger numbers, and there is no way round it. The Owl
+  is 748 tiles cut into 44 blocks, so its blocks are fifteen to twenty-four
+  while the Heart's are six to eight. Getting single figures on the Owl would
+  need a hundred blocks, and 64 already leaves eight pictures with no winnable
+  deal — so the number on a block is set by the artwork, not by taste.
+- The library was doubled algorithmically rather than redrawn. Scale2x keeps
+  every silhouette and smooths the diagonals, but it cannot add detail that
+  was not drawn, so the outlines are two tiles thick and a few small features
+  came out rounder than intended — the Owl's square eyes are now blobs. A
+  hand-drawn pass at the new size would fix both.
 - A picture is judged by eye, once. There is no test that says the Bear reads
   as a bear — only that its rows are even and its colors far enough apart. The
   contact sheet that catches the failures is a scratch tool, not part of the

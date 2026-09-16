@@ -69,8 +69,8 @@ describe('the settings', () => {
     for (let i = 1; i < SETTING_COUNT; i++) {
       const prev = setting(i - 1);
       const next = setting(i);
-      // Smaller blocks, so more of them, and never more slots.
-      expect(next.blockMax).toBeLessThan(prev.blockMax);
+      // More blocks, so smaller ones, and never more slots.
+      expect(next.blocks).toBeGreaterThan(prev.blocks);
       expect(next.slots).toBeLessThanOrEqual(prev.slots);
     }
   });
@@ -150,15 +150,40 @@ describe('the generator', () => {
     }
   });
 
-  it('keeps blocks inside the setting band, bar the last of a color', () => {
-    const level = generateLevel(PICTURE_COUNT - 1, 0, 11);
-    const rules = setting(0);
-    const oversized = level.blocks.filter((b) => b.count > rules.blockMax);
-    expect(oversized).toHaveLength(0);
+  /* A setting asks for a number of blocks, not a size, so what there is to
+     check is that it got roughly what it asked for — and that no block is
+     empty, since a block of nothing could never be played. The count is
+     approximate by construction: a color's share is rounded, and a color
+     with fewer tiles than its share gets one block per tile. */
+  it('cuts roughly the number of blocks the setting asks for', () => {
+    for (let settingIndex = 0; settingIndex < SETTING_COUNT; settingIndex++) {
+      const rules = setting(settingIndex);
+      for (const pictureIndex of [0, Math.floor(PICTURE_COUNT / 2), PICTURE_COUNT - 1]) {
+        const level = generateLevel(pictureIndex, settingIndex, 11);
+        const where = `${level.name} at ${rules.name}`;
+        expect(level.blocks.length, where).toBeGreaterThanOrEqual(rules.blocks * 0.6);
+        expect(level.blocks.length, where).toBeLessThanOrEqual(rules.blocks * 1.6);
+        expect(level.blocks.every((b) => b.count >= 1), `${where} has an empty block`).toBe(true);
+      }
+    }
+  });
+
+  /* The point of counting blocks rather than sizing them: a picture four
+     times the size is not four times the number of blocks. */
+  it('cuts a big picture into bigger blocks, not more of them', () => {
+    const small = generateLevel(0, 2, 11);
+    const large = generateLevel(PICTURE_COUNT - 1, 2, 11);
+    const tiles = (level: typeof small) =>
+      level.blocks.reduce((n, b) => n + b.count, 0);
+
+    expect(tiles(large)).toBeGreaterThan(tiles(small) * 3);
+    expect(large.blocks.length).toBeLessThan(small.blocks.length * 2);
+    const mean = (level: typeof small) => tiles(level) / level.blocks.length;
+    expect(mean(large)).toBeGreaterThan(mean(small) * 2);
   });
 
   it('cuts more blocks as the setting hardens', () => {
-    // The same picture, harder: smaller blocks and so more of them.
+    // The same picture, harder: more blocks and so smaller ones.
     const gentle = generateLevel(PICTURE_COUNT - 1, 0, 99).blocks.length;
     const expert = generateLevel(PICTURE_COUNT - 1, SETTING_COUNT - 1, 99).blocks.length;
     expect(expert).toBeGreaterThan(gentle * 2);

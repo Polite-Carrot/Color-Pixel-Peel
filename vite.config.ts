@@ -1,4 +1,6 @@
-import { defineConfig } from 'vite';
+/* From vitest rather than vite: same config object, but with the `test`
+   key below typed. */
+import { defineConfig } from 'vitest/config';
 
 /**
  * The shipped artifact is the repository root: `index.html` next to
@@ -35,5 +37,12 @@ export default defineConfig({
   server: {
     host: true,
     port: 5173,
+  },
+  test: {
+    /* The campaign tests deal and solve all five hundred levels, and the
+       pictures are four times finer than they were, so a whole-campaign
+       test takes well over Vitest's five-second default. Raised rather
+       than sampled: proving every level winnable is the point of it. */
+    testTimeout: 120_000,
   },
 });
