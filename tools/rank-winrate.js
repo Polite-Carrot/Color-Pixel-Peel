@@ -1,12 +1,12 @@
 /* Hardness as "what fraction of deals of this picture are winnable at
  * Expert". Smoother and more meaningful than counting reseeds: a picture
  * whose every deal wins is easy however many tiles it has. */
-import { PICTURE_COUNT, picture } from '/home/user/Color-Pixel-Peel/src/core/pictures.ts';
-import { colorCounts, parsePicture } from '/home/user/Color-Pixel-Peel/src/core/picture.ts';
-import { block } from '/home/user/Color-Pixel-Peel/src/core/blocks.ts';
-import { createRng } from '/home/user/Color-Pixel-Peel/src/core/rng.ts';
-import { playGreedily } from '/home/user/Color-Pixel-Peel/src/core/solve.ts';
-import { SETTINGS, blocksFor } from '/home/user/Color-Pixel-Peel/src/core/generator.ts';
+
+import { colorCounts, parsePicture } from '../src/core/picture.ts';
+import { block } from '../src/core/blocks.ts';
+import { createRng } from '../src/core/rng.ts';
+import { playGreedily } from '../src/core/solve.ts';
+import { SETTINGS, blocksFor } from '../src/core/generator.ts';
 
 export function cut(total, pieces, rng) {
   const n = Math.max(1, Math.min(pieces, total));
@@ -41,25 +41,6 @@ export function winRate(art, rules, deals = 40) {
   return won / deals;
 }
 
-{
-  const expert = SETTINGS[4], hard = SETTINGS[3];
-  const rows = [];
-  for (let p = 0; p < PICTURE_COUNT; p += 1) {
-    const art = picture(p);
-    const counts = colorCounts(parsePicture(art));
-    const total = [...counts.values()].reduce((n, c) => n + c, 0);
-    rows.push({
-      name: art.name, tiles: total, colors: counts.size,
-      dom: Math.max(...counts.values()) / total,
-      e: winRate(art, expert), h: winRate(art, hard),
-    });
-  }
-  rows.sort((a, b) => (b.e + b.h) - (a.e + a.h));
-  const line = (r) => `${r.name.padEnd(12)} ${String(r.tiles).padStart(4)}t ${r.colors}c dom ${(r.dom*100).toFixed(0).padStart(3)}%  Expert ${(r.e*100).toFixed(0).padStart(3)}%  Hard ${(r.h*100).toFixed(0).padStart(3)}%`;
-  console.log('EASIEST 10 (most deals winnable):');
-  for (const r of rows.slice(0, 10)) console.log('  ' + line(r));
-  console.log('\nHARDEST 10:');
-  for (const r of rows.slice(-10)) console.log('  ' + line(r));
-  const owl = rows.find((r) => r.name === 'Owl');
-  console.log(`\nOwl: ${line(owl)}   rank ${rows.indexOf(owl) + 1} of ${rows.length} (1 = easiest)`);
-}
+/* Measuring only — importing this must not run the whole library, which
+   it used to: rank-pictures.js imports winRate and the survey below then
+   ran a second time on every invocation. */
