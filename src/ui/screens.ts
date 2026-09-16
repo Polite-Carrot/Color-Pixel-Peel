@@ -1,3 +1,4 @@
+import { UNLOCK_ALL_LEVELS } from '../config';
 import { LEVEL_COUNT, type LevelSummary, levelSummaries } from '../core/levels';
 import type { StoreKind } from '../core/storage';
 
@@ -62,7 +63,13 @@ export class Screens {
   renderLevels(unlockedLevel: number, onPick: (index: number) => void): void {
     const reached = Math.min(unlockedLevel, LEVEL_COUNT);
     const done = Math.max(0, Math.min(unlockedLevel - 1, LEVEL_COUNT));
+    /* The count is still what you have cleared, not what you can open, so
+       it stays true while the test switch is on. What the switch is doing
+       is said on its own line below rather than appended here, where at
+       phone width it wrapped the subhead onto three lines and squeezed the
+       Menu button. */
     this.progress.textContent = `${done} of ${LEVEL_COUNT} cleared`;
+    this.showTestNote();
 
     const summaries = levelSummaries();
     const runs = new Map<string, number>();
@@ -82,6 +89,28 @@ export class Screens {
     }
 
     this.grid.replaceChildren(...items);
+  }
+
+  /**
+   * Says on screen that the build is handing out every level.
+   *
+   * Built here rather than written into index.html, so that setting
+   * UNLOCK_ALL_LEVELS back to false takes the notice with it instead of
+   * leaving dead markup behind.
+   */
+  private showTestNote(): void {
+    const existing = document.getElementById('levels-test-note');
+    if (!UNLOCK_ALL_LEVELS) {
+      existing?.remove();
+      return;
+    }
+    if (existing) return;
+
+    const note = document.createElement('p');
+    note.id = 'levels-test-note';
+    note.className = 'status status--test';
+    note.textContent = 'Test build \u2014 every level is open, however far you have got.';
+    this.grid.before(note);
   }
 
   /** A full-width rule between one setting's run of levels and the next. */
@@ -109,7 +138,10 @@ export class Screens {
     onPick: (index: number) => void,
   ): HTMLLIElement {
     const index = summary.index;
-    const locked = index > reached;
+    /* Reached is still where progress has got to — it is what picks out
+       the next level in gold and ticks the ones behind it. The switch
+       only decides whether a tile further on can be pressed. */
+    const locked = index > reached && !UNLOCK_ALL_LEVELS;
     const isNext = index === reached && index > done;
 
     const item = document.createElement('li');
@@ -130,6 +162,10 @@ export class Screens {
     const state = document.createElement('span');
     state.className = 'tile__state';
     state.textContent = locked ? '🔒' : index < reached ? '✓' : '';
+    /* Open, but not yet earned: worth looking different from a level you
+       actually reached, so the list still reads as progress rather than as
+       five hundred identical tiles. */
+    if (!locked && index > reached) button.classList.add('is-ahead');
 
     /* The setting is on the heading above the run rather than on every
        tile in it: five hundred tiles each repeating the same word is
@@ -141,7 +177,9 @@ export class Screens {
       'aria-label',
       locked
         ? `Level ${index}, ${summary.name}, ${summary.setting} — locked`
-        : `Level ${index}, ${summary.name}, ${summary.setting}${index < reached ? ', cleared' : ''}`,
+        : `Level ${index}, ${summary.name}, ${summary.setting}${
+            index < reached ? ', cleared' : index > reached ? ', not reached yet' : ''
+          }`,
     );
     if (!locked) button.addEventListener('click', () => onPick(index));
 

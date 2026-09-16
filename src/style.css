@@ -409,6 +409,16 @@ body {
 /* The one to play next. */
 .tile.is-next { background: var(--gold); }
 
+/* Open because the build says so, rather than because you got there. Kept
+   visibly apart from a level you actually reached — same paper as a locked
+   tile, but pressable. Goes with UNLOCK_ALL_LEVELS in src/config.ts. */
+.tile.is-ahead {
+  background: rgba(255, 255, 255, .6);
+  color: var(--ink-soft);
+}
+.tile.is-ahead:hover:not(:disabled) { background: #fff; }
+.tile.is-ahead .tile__name { color: rgba(43, 33, 66, .5); }
+
 .tile__no {
   font-family: "Baloo 2", sans-serif;
   font-weight: 800;
@@ -564,6 +574,22 @@ body {
   flex: none;
 }
 .status[hidden] { display: none; }
+
+/* The test build saying so. Gold rather than red: it is a note about the
+   build, not a fault. Goes with UNLOCK_ALL_LEVELS in src/config.ts, and is
+   removed with it. */
+.status--test {
+  flex: none;
+  max-width: none;
+  margin: 0 0 10px;
+  padding: 7px 12px;
+  border: 2px solid var(--ink);
+  border-radius: 11px;
+  background: var(--gold);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 700;
+}
 
 /* ───────── buttons ───────── */
 
