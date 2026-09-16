@@ -1,5 +1,6 @@
 import { blockTotals, type Block, block } from './blocks';
 import type { LevelDef } from './levels';
+import type { ColorId } from './palette';
 import { colorCounts, parsePicture } from './picture';
 import { PICTURE_COUNT, picture } from './pictures';
 import { createRng } from './rng';
@@ -109,15 +110,63 @@ function cut(total: number, pieces: number, rng: { int(n: number): number }): nu
 }
 
 /**
- * How many blocks a color is worth, given how much of the picture it is.
+ * Splits `want` blocks between the colors, by how much of the picture
+ * each one is.
  *
  * Share of the tiles rather than an equal split per color: the Owl's
- * brown is most of the bird and its orange beak is four tiles, and giving
- * them the same number of blocks would make the beak into four blocks of
- * one.
+ * brown is most of the bird and its beak is a dozen tiles, and giving
+ * them the same number of blocks would make the beak into blocks of one.
+ *
+ * Largest remainder rather than rounding each color on its own, because
+ * the total has to land on `want` exactly. Rounding independently
+ * overshoots — the seven-color Owl came out at 51 blocks against a
+ * ceiling of 50 — and a ceiling that leaks is not a ceiling, which
+ * matters here because it is the thing keeping the deals winnable.
+ *
+ * Every color gets at least one block and never more blocks than it has
+ * tiles, so those two bounds are applied first and the remainder shared
+ * out among whatever slack is left.
  */
-function share(count: number, total: number, blocks: number): number {
-  return Math.max(1, Math.round((blocks * count) / total));
+function shares(counts: ReadonlyMap<ColorId, number>, want: number): Map<ColorId, number> {
+  const colors = [...counts.keys()].sort((a, b) => a - b);
+  const total = [...counts.values()].reduce((n, c) => n + c, 0);
+  const out = new Map<ColorId, number>();
+
+  const remainders: { color: ColorId; frac: number }[] = [];
+  let given = 0;
+
+  for (const color of colors) {
+    const count = counts.get(color) as number;
+    const raw = (want * count) / total;
+    const floor = Math.min(count, Math.max(1, Math.floor(raw)));
+    out.set(color, floor);
+    given += floor;
+    if (floor < count) remainders.push({ color, frac: raw - Math.floor(raw) });
+  }
+
+  // Biggest fractional part first, and stop the moment the cap is met.
+  remainders.sort((a, b) => b.frac - a.frac);
+  for (const { color } of remainders) {
+    if (given >= want) break;
+    const count = counts.get(color) as number;
+    const have = out.get(color) as number;
+    if (have >= count) continue;
+    out.set(color, have + 1);
+    given += 1;
+  }
+
+  /* The floors alone can already exceed the cap when there are more
+     colors than blocks asked for. Take back from the colors holding the
+     most, never below one. */
+  while (given > want) {
+    const biggest = colors.reduce((a, b) => ((out.get(b) as number) > (out.get(a) as number) ? b : a));
+    const have = out.get(biggest) as number;
+    if (have <= 1) break;
+    out.set(biggest, have - 1);
+    given -= 1;
+  }
+
+  return out;
 }
 
 /**
@@ -132,15 +181,13 @@ function deal(pictureIndex: number, settingIndex: number, seed: number, blocks: 
   const rng = createRng(seed);
 
   const counts = colorCounts(parsePicture(art));
-  const total = [...counts.values()].reduce((n, c) => n + c, 0);
+  const split = shares(counts, blocks);
   const hand: Block[] = [];
-  const want = blocks;
 
   // Sorted by color id so the hand is built in a fixed order; the deal
   // shuffles it afterwards anyway.
   for (const color of [...counts.keys()].sort((a, b) => a - b)) {
-    const count = counts.get(color) as number;
-    for (const size of cut(count, share(count, total, want), rng)) {
+    for (const size of cut(counts.get(color) as number, split.get(color) as number, rng)) {
       hand.push(block(color, size));
     }
   }

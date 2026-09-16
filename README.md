@@ -170,14 +170,62 @@ allow, and how much room there is to hold one that cannot move yet.
 
 **A size, with a ceiling on the count.** Both halves are needed. Aiming at a
 block count does not survive a library this wide — fifty-six blocks is a
-sensible cut of the 748-tile Owl and an absurd one of the 156-tile Heart,
+sensible cut of the 903-tile Owl and an absurd one of the 156-tile Heart,
 where it comes out as fifty-six blocks of two. Aiming at a size alone does not
 survive the slots, for the reason below.
 
 Levels 1–100 are the whole library at Gentle, 101–200 the same pictures at
 Easy, and so on — so the Heart is met four more times, each time with a
-coarser cut and less panel to work with. The Owl, 748 tiles, is 56 blocks and
+coarser cut and less panel to work with. The Owl, 903 tiles, is 50 blocks and
 five slots at level 100 and **42 blocks and two slots** at level 500.
+
+### The library is ordered by difficulty, not by size
+
+That is a correction. The pictures used to be sorted smallest first, so the
+903-tile Owl finished every run — and it was one of the easiest levels in the
+game. **98% of its deals were winnable.** It was mostly one colour, and a
+colour that abundant is always reachable, so its blocks never stranded and the
+panel never came under pressure. Size is not difficulty.
+
+What difficulty actually is, measured over 24 deals per picture at each of the
+three tightest settings:
+
+| Picture | Tiles | Colours | Deals winnable |
+|---------|-------|---------|----------------|
+| Owl (before) | 748 | 5 | 98% |
+| Penguin | 434 | 3 | 100% |
+| Cherry | 374 | 3 | 8% |
+| Panda | 408 | 2 | 6% |
+| Deer | 304 | 3 | 6% |
+
+The Deer is the smallest picture in that list and the hardest thing in the
+library. What makes it hard is a **small colour walled in deep** — a muzzle of
+eight tiles behind everything else — because the block holding it ties up a
+slot until the picture opens. That is the shape of a hard level, and it has
+nothing to do with tile count.
+
+So the order is now two rankings added together: how many deals are winnable,
+and how many tiles there are. Either alone gets one end wrong — hardness alone
+finishes the campaign on a two-colour Panda, size alone finishes it on
+something trivial. Together a run opens on a small forgiving picture and
+closes on a big unforgiving one. `tools/rank-pictures.js` prints the order and
+the library is written in it; adding a picture means re-ranking.
+
+### The Owl was redrawn to earn the finale
+
+Fixing the order alone would have moved the Owl to 86th. It was redrawn
+instead, because the finale should be the showpiece: slate wings, a white
+chest with dark speckles, an orange beak and feet, a green branch, and eyes of
+**eight yellow tiles buried behind two other colours** — the Deer's trick,
+applied on purpose.
+
+| | Tiles | Colours | Biggest colour | Deals winnable |
+|--|-------|---------|----------------|----------------|
+| Before | 748 | 5 | 57% | 98% |
+| After | 903 | 7 | 36% | 38% |
+
+A third of deals winnable is the target the brief asked for: you can lose it,
+and losing it is about how you played rather than about which hand you got.
 
 The settings sweep on the outside and the pictures on the inside on purpose.
 Within a run of 100 the picture is the variable and the pressure is constant,
@@ -223,15 +271,23 @@ prefers blocks the picture can pay in full, so slots free sooner, moved 92 to
 93.
 
 The ceiling is what stops the numbers on the tray getting smaller than they
-are. The Owl at Expert wants blocks of eleven and gets blocks of eighteen,
+are. The Owl at Expert wants blocks of eleven and gets blocks of twenty-one,
 because forty-two is all two slots will carry. That is the honest limit of a
-748-tile picture, not something a setting can tune away — and it is the one
+903-tile picture, not something a setting can tune away — and it is the one
 place the finer artwork costs something.
+
+The ceiling has to be exact, and for a while it was not. Each colour's share
+of the blocks was rounded on its own, so the parts could sum past the total:
+the seven-colour Owl came out at 51 blocks against a ceiling of 50. Largest
+remainder fixes it — every colour gets at least one block and never more
+blocks than it has tiles, and the remainder is shared out until the ceiling is
+met exactly. A ceiling that leaks is not a ceiling, and this one is what keeps
+the deals winnable.
 
 ### Adding a picture adds five levels
 
-`src/core/pictures.ts` is the only place artwork lives — 100 pictures, ordered
-smallest first, from a 156-tile Heart to a 748-tile Owl. A picture is rows of
+`src/core/pictures.ts` is the only place artwork lives — 100 pictures, from a
+156-tile Heart to a 903-tile Owl. A picture is rows of
 legend characters and a legend mapping them to palette colors, and nothing
 else about it is written by hand — the blocks, the deal and the difficulty all
 come from the setting it is paired with.
@@ -455,8 +511,9 @@ favicon.svg
 assets/               the Polite Carrot lockup
 app/                  committed build output: app.js, app.css
 src/                  the source Vite bundles into app/
-src/core/pictures.ts  the artwork library — 100 pictures, five levels each
+src/core/pictures.ts  the artwork library — 100 pictures, hardest last
 tools/check-levels.js deals the whole campaign and reports what it measured
+tools/rank-pictures.js orders the library by how often its deals are winnable
 www/                  ignored — assembled by sync-web.js for the native shells
 ```
 
@@ -666,7 +723,7 @@ render smaller.
   drawing is the slow part — so more artwork is the only thing that makes the
   campaign wider rather than longer.
 - Bigger pictures mean bigger numbers, and there is no way round it. The Owl
-  is 748 tiles held at 42 blocks by the two-slot ceiling, so its blocks run to
+  is 903 tiles held at 42 blocks by the two-slot ceiling, so its blocks run to
   the twenties while the Heart's are fives and sixes. Getting single figures
   on the Owl would need a hundred blocks, and 64 already leaves eight pictures
   with no winnable deal — so the number on a block is set by the artwork and
@@ -680,6 +737,14 @@ render smaller.
   as a bear — only that its rows are even and its colors far enough apart. The
   contact sheet that catches the failures is a scratch tool, not part of the
   repo, so a redraw that quietly stops reading would pass CI.
+- The difficulty order is a snapshot, not a rule the code enforces. It was
+  measured once and written into the file, so a change to the settings, the
+  solver or the cut can leave the library sorted by a ranking that is no
+  longer true — and nothing will say so. Re-run `tools/rank-pictures.js` after
+  touching any of them.
+- Only the Owl was redrawn for variation. The measurements name others that
+  are mostly one colour and correspondingly easy — the Penguin is 76% one
+  colour and wins every deal — and they are still in the library as they were.
 - The hardest levels are hard because a wrong block costs a slot, not because
   they demand precision. A player who could see which colors are reachable
   would find them straightforward; that information is deliberately withheld.
