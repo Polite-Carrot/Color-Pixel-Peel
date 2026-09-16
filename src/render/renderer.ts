@@ -44,9 +44,6 @@ const MAX_TILE = 64;
  */
 const CARD = '#e7edf5';
 const CARD_EDGE = 'rgba(43, 33, 66, .16)';
-/** Where a tile has been taken away, the card shows through, a shade
- *  darker so progress is visible against the mount. */
-const EMPTY = 'rgba(43, 33, 66, .07)';
 
 function computeLayout(board: Board, width: number, height: number): Layout {
   const gap = Math.max(1, Math.round(Math.min(width, height) * 0.006));
@@ -211,13 +208,15 @@ export class Renderer {
     const radius = size * 0.18;
     const color = tileAt(this.board, i);
 
-    if (color === null) {
-      // A faint print of where the tile was, so progress is visible.
-      ctx.fillStyle = EMPTY;
-      roundRect(ctx, x, y, size, size, radius);
-      ctx.fill();
-      return;
-    }
+    /* Nothing is drawn where there is no tile — not even a faint print of
+       where one was.
+    
+       There used to be one, on the theory that it made progress visible.
+       What it actually did was tile the whole card in pale grey squares,
+       and `slate` is a playable color: the background read as tiles the
+       player still had to clear. Progress is legible anyway, because the
+       picture visibly loses pieces. */
+    if (color === null) return;
 
     /* Flat fills, no outline and no shadow. An earlier version raised
        every reachable tile with an ink outline, which worked on a board
