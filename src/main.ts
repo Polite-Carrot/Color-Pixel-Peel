@@ -224,6 +224,9 @@ function boot(): void {
     syncHome();
     screens.renderLevels(progress.unlockedLevel, startLevel);
     screens.show('levels');
+    /* After show, not before: the list has no layout to scroll while its
+       screen is hidden. */
+    screens.revealNextLevel();
   };
 
   const startPlaying = (): void => {

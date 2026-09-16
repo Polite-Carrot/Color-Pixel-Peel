@@ -1,4 +1,4 @@
-import { LEVEL_COUNT, levelSummaries } from '../core/levels';
+import { LEVEL_COUNT, type LevelSummary, levelSummaries } from '../core/levels';
 import type { StoreKind } from '../core/storage';
 
 export type ScreenName = 'home' | 'levels' | 'game';
@@ -54,53 +54,115 @@ export class Screens {
    * can be replayed, the next one is picked out in gold, and the rest are
    * shown but locked — so the list says how much game there is, not just
    * how much of it you have seen.
+   *
+   * Five hundred tiles is too long a scroll to hand over as one run, so
+   * each setting gets a heading that says how far through it you are, and
+   * opening the list jumps to the level you are actually on.
    */
   renderLevels(unlockedLevel: number, onPick: (index: number) => void): void {
     const reached = Math.min(unlockedLevel, LEVEL_COUNT);
     const done = Math.max(0, Math.min(unlockedLevel - 1, LEVEL_COUNT));
     this.progress.textContent = `${done} of ${LEVEL_COUNT} cleared`;
 
-    this.grid.replaceChildren(
-      ...levelSummaries().map((summary) => {
-        const index = summary.index;
-        const locked = index > reached;
-        const isNext = index === reached && index > done;
+    const summaries = levelSummaries();
+    const runs = new Map<string, number>();
+    for (const summary of summaries) {
+      runs.set(summary.setting, (runs.get(summary.setting) ?? 0) + 1);
+    }
 
-        const item = document.createElement('li');
-        const button = document.createElement('button');
-        button.type = 'button';
-        button.className = `tile${isNext ? ' is-next' : ''}`;
-        button.disabled = locked;
+    const items: HTMLLIElement[] = [];
+    let heading: string | null = null;
 
-        const no = document.createElement('span');
-        no.className = 'tile__no';
-        no.textContent = String(index);
+    for (const summary of summaries) {
+      if (summary.setting !== heading) {
+        heading = summary.setting;
+        items.push(this.settingHeading(heading, runs.get(heading) ?? 0, done, summary.index));
+      }
+      items.push(this.levelTile(summary, reached, done, onPick));
+    }
 
-        const name = document.createElement('span');
-        name.className = 'tile__name';
-        name.textContent = summary.name;
+    this.grid.replaceChildren(...items);
+  }
 
-        const band = document.createElement('span');
-        band.className = 'tile__setting';
-        band.textContent = summary.setting;
+  /** A full-width rule between one setting's run of levels and the next. */
+  private settingHeading(name: string, length: number, done: number, first: number): HTMLLIElement {
+    const item = document.createElement('li');
+    item.className = 'level-head';
 
-        const state = document.createElement('span');
-        state.className = 'tile__state';
-        state.textContent = locked ? '🔒' : index < reached ? '✓' : '';
+    const label = document.createElement('b');
+    label.textContent = name;
 
-        button.append(no, name, band, state);
-        button.setAttribute(
-          'aria-label',
-          locked
-            ? `Level ${index}, ${summary.name}, ${summary.setting} — locked`
-            : `Level ${index}, ${summary.name}, ${summary.setting}${index < reached ? ', cleared' : ''}`,
-        );
-        if (!locked) button.addEventListener('click', () => onPick(index));
+    /* How much of this run is behind you, rather than of the campaign —
+       "12 of 100" is the number you want while you are inside a run. */
+    const cleared = Math.max(0, Math.min(done - (first - 1), length));
+    const count = document.createElement('span');
+    count.textContent = `${cleared} of ${length}`;
 
-        item.append(button);
-        return item;
-      }),
+    item.append(label, count);
+    return item;
+  }
+
+  private levelTile(
+    summary: LevelSummary,
+    reached: number,
+    done: number,
+    onPick: (index: number) => void,
+  ): HTMLLIElement {
+    const index = summary.index;
+    const locked = index > reached;
+    const isNext = index === reached && index > done;
+
+    const item = document.createElement('li');
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = `tile${isNext ? ' is-next' : ''}`;
+    button.disabled = locked;
+    if (isNext) button.dataset.next = 'true';
+
+    const no = document.createElement('span');
+    no.className = 'tile__no';
+    no.textContent = String(index);
+
+    const name = document.createElement('span');
+    name.className = 'tile__name';
+    name.textContent = summary.name;
+
+    const state = document.createElement('span');
+    state.className = 'tile__state';
+    state.textContent = locked ? '🔒' : index < reached ? '✓' : '';
+
+    /* The setting is on the heading above the run rather than on every
+       tile in it: five hundred tiles each repeating the same word is
+       noise, and the tile has the level number and the picture to carry.
+       It stays in the label, where someone arriving by screen reader has
+       no heading in view to read it from. */
+    button.append(no, name, state);
+    button.setAttribute(
+      'aria-label',
+      locked
+        ? `Level ${index}, ${summary.name}, ${summary.setting} — locked`
+        : `Level ${index}, ${summary.name}, ${summary.setting}${index < reached ? ', cleared' : ''}`,
     );
+    if (!locked) button.addEventListener('click', () => onPick(index));
+
+    item.append(button);
+    return item;
+  }
+
+  /**
+   * Puts the level you are on in the middle of the list.
+   *
+   * At level 300 the tile is eleven thousand pixels down, so opening the
+   * list at the top would mean scrolling past six runs of cleared levels
+   * to find it. Called after the screen is showing, because a hidden
+   * element has no layout to scroll to.
+   */
+  revealNextLevel(): void {
+    const next = this.grid.querySelector<HTMLElement>('.tile[data-next]');
+    if (!next) return;
+    const item = next.parentElement ?? next;
+    const middle = item.offsetTop - (this.grid.clientHeight - item.offsetHeight) / 2;
+    this.grid.scrollTop = Math.max(0, middle);
   }
 
   updateHome(model: HomeModel): void {

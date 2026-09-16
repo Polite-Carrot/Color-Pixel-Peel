@@ -54,15 +54,19 @@ for (let index = 1; index <= LEVEL_COUNT; index += 1) {
 const pad = (v, n) => String(v).padStart(n);
 const padEnd = (v, n) => String(v).padEnd(n);
 
-console.log(
-  padEnd('#', 4) + padEnd('picture', 11) + padEnd('setting', 8) +
+/* Five hundred rows is more than anyone reads at once, so the table is
+   opt-in and the aggregates below always print. */
+const verbose = process.argv.includes('--all');
+
+if (verbose) console.log(
+  padEnd('#', 4) + padEnd('picture', 12) + padEnd('setting', 8) +
   pad('tiles', 6) + pad('col', 4) + pad('sealed', 7) + pad('blocks', 7) +
   pad('cols', 5) + pad('slots', 6) + pad('plays', 6) + pad('peak', 5) +
   pad('strand', 7) + '  won'
 );
-for (const r of rows) {
+for (const r of verbose ? rows : []) {
   console.log(
-    padEnd(r.index, 4) + padEnd(r.name, 11) + padEnd(r.setting, 8) +
+    padEnd(r.index, 4) + padEnd(r.name, 12) + padEnd(r.setting, 8) +
     pad(r.tiles, 6) + pad(r.colors, 4) + pad(r.sealed, 7) + pad(r.blocks, 7) +
     pad(r.columns, 5) + pad(r.slots, 6) + pad(r.plays, 6) + pad(r.peak, 5) +
     pad(r.stranded, 7) + '  ' + (r.won ? 'yes' : 'NO (' + r.left + ' left)')

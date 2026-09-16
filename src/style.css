@@ -423,16 +423,33 @@ body {
   color: var(--ink-soft);
 }
 .tile.is-next .tile__name { color: var(--ink); }
-.tile__setting {
-  font-size: 9px;
-  font-weight: 800;
-  letter-spacing: .06em;
-  text-transform: uppercase;
-  line-height: 1;
-  color: var(--ink-soft);
+
+/* The rule between one setting's run of levels and the next. It spans the
+   grid whatever number of columns the window gives, so the runs read as
+   runs rather than as five hundred tiles in a row. */
+.level-head {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 10px 2px 0;
+  padding-bottom: 6px;
+  border-bottom: 2px solid var(--ink-faint);
 }
-.tile.is-next .tile__setting { color: var(--ink); }
-.tile:disabled .tile__setting { color: rgba(43, 33, 66, .4); }
+.level-head:first-child { margin-top: 0; }
+.level-head b {
+  font-family: "Baloo 2", sans-serif;
+  font-weight: 800;
+  font-size: 19px;
+  line-height: 1;
+}
+.level-head span {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+}
 
 .tile__state { font-size: 12px; line-height: 1; }
 .tile:disabled .tile__name { color: rgba(43, 33, 66, .4); }

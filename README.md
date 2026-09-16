@@ -16,10 +16,10 @@ Three parts:
 Play a block and it takes that many tiles of its color off the picture. Clear
 the whole picture and the level is done.
 
-There are a hundred levels, and none of them are written by hand: 20 pictures
-paired with 5 difficulty settings, each pairing dealt and then proved winnable
-before it ships. [Levels, and the curve](#levels-and-the-curve) is how that
-works.
+There are five hundred levels, and none of them are written by hand: 100
+pictures paired with 5 difficulty settings, each pairing dealt and then proved
+winnable before it ships. [Levels, and the curve](#levels-and-the-curve) is how
+that works.
 
 ### Only the front of each column can be played
 
@@ -127,29 +127,42 @@ open, the next one is picked out in gold, and the rest are shown but locked —
 the list says how much game there is, not only how much of it you have seen.
 The board's **← Menu** and the win card's **Menu** both return here.
 
+Five hundred tiles is 18,000px of scroll, which is too much to hand over as
+one run. Two things make it navigable. Each setting gets a full-width heading
+carrying its name and how far through that run you are, so the list reads as
+five hundreds rather than one five hundred. And opening it **scrolls the level
+you are on into the middle** — at level 287 that tile is 10,000px down, and
+starting at the top would mean scrolling past two and a half runs of cleared
+levels to reach it.
+
+The setting label came off the tiles when the headings went in: five hundred
+tiles each repeating the same word is noise, and the tile already carries its
+number and its picture. It stays in each tile's `aria-label`, where someone
+arriving by screen reader has no heading in view to read it from.
+
 ### Levels, and the curve
 
-The campaign is **generated, not authored**: 20 pictures × 5 settings = 100
+The campaign is **generated, not authored**: 100 pictures × 5 settings = 500
 levels. A setting says how finely the picture is cut into blocks and how much
 room there is to hold one that cannot move yet.
 
 | Setting | Block sizes | Slots | Columns | Blocks per level | Panel peak |
 |---------|-------------|-------|---------|------------------|------------|
-| Gentle | 8–14 | 5 | 3 | 10.2 average | 5 |
-| Easy | 6–11 | 5 | 4 | 12.4 average | 5 |
-| Normal | 5–9 | 4 | 4 | 15.3 average | 4 |
-| Hard | 4–7 | 3 | 4 | 18.9 average | 3 |
-| Expert | 3–5 | 2 | 5 | 25.8 average | 2 |
+| Gentle | 8–14 | 5 | 3 | 9.5 average | 5 |
+| Easy | 6–11 | 5 | 4 | 11.9 average | 5 |
+| Normal | 5–9 | 4 | 4 | 14.4 average | 4 |
+| Hard | 4–7 | 3 | 4 | 18.0 average | 3 |
+| Expert | 3–5 | 2 | 5 | 24.5 average | 2 |
 
-Levels 1–20 are the whole library at Gentle, 21–40 the same pictures at Easy,
-and so on — so the Heart is met four more times, each time cut smaller with
-less panel to work with. The Owl, 188 tiles, is 19 blocks and five slots at
-level 20 and **47 blocks and two slots** at level 100.
+Levels 1–100 are the whole library at Gentle, 101–200 the same pictures at
+Easy, and so on — so the Heart is met four more times, each time cut smaller
+with less panel to work with. The Owl, 188 tiles, is 19 blocks and five slots
+at level 100 and **47 blocks and two slots** at level 500.
 
 The settings sweep on the outside and the pictures on the inside on purpose.
-Within a run of 20 the picture is the variable and the pressure is constant,
-which is how a setting gets learned; a picture then returns far enough apart
-to have been half forgotten, and harder when it does.
+Within a run of 100 the picture is the variable and the pressure is constant,
+which is how a setting gets learned; a picture then returns a hundred levels
+later, far enough apart to have been half forgotten, and harder when it does.
 
 Difficulty is turned with four things and deliberately not with luck: the size
 and tangle of the picture, how many colors it holds, how many **slots** there
@@ -169,14 +182,23 @@ exactly the point there is least room to wait.
 
 ### Adding a picture adds five levels
 
-`src/core/pictures.ts` is the only place artwork lives. A picture is rows of
+`src/core/pictures.ts` is the only place artwork lives — 100 pictures, ordered
+smallest first, from a 40-tile Heart to a 188-tile Owl. A picture is rows of
 legend characters and a legend mapping them to palette colors, and nothing
 else about it is written by hand — the blocks, the deal and the difficulty all
 come from the setting it is paired with.
 
-So the library is 20 pictures rather than 100, and grows five levels at a
-time. Adding one at the end of `PICTURES` appends a level to each setting's
-run; `LEVEL_COUNT` follows on its own.
+So the library grows five levels at a time. Adding one to `PICTURES` appends a
+level to each setting's run; `LEVEL_COUNT` follows on its own.
+
+Each is drawn at nine to fifteen tiles across, which is small enough that
+**flat shapes read and lattices do not**. A first pass drew a bee as wings and
+a thin striped body with dark pixels threaded through it, and at that size it
+came out as noise; the same bee as a solid seven-wide body with three stripes
+and two wing blobs reads immediately. Anything that needed interior detail to
+be recognisable — a snail's spiral, a squirrel's tail, a dolphin's snout — was
+redrawn as a silhouette with one clear protrusion, or swapped for a subject
+that survives the resolution.
 
 ### Every level is dealt, played and only then shipped
 
@@ -194,13 +216,16 @@ cannot be completed however well it is played.
 which is where the table above comes from:
 
 ```
-100 levels dealt, 100 winnable, 0 not
-98/100 levels drive the panel to full
+500 levels dealt, 500 winnable, 0 not
+498/500 levels drive the panel to full
 ```
 
-The two that do not are levels 1 and 2 — the Heart and the Star at Gentle,
-four blocks each and five slots to put them in. That is the tutorial working
-as intended, and every level after it runs the panel out.
+The two that do not are the smallest pictures at Gentle, four blocks each and
+five slots to put them in. That is the tutorial working as intended, and every
+level after it runs the panel out.
+
+Pass `--all` for the per-level table; without it only the aggregates print,
+because five hundred rows is more than anyone reads at once.
 
 ### Levels are balanced, and checked
 
@@ -208,12 +233,21 @@ A level's blocks add up to its picture's tile counts **exactly** — nothing
 spare, nothing missing — so clearing the picture means spending every block,
 and a block wasted early is a level that can no longer be finished.
 
-`levels.test.ts` checks that per color for all 100 levels, checks no two colors
+`levels.test.ts` checks that per color for all 500 levels, checks no two colors
 in one picture sit closer than the distance rule allows, checks the settings
 never soften as the campaign goes on, and plays every level through
 **respecting the column constraint** — only ever choosing between the fronts —
-to prove it can actually be won. The full suite is 243 tests and runs in about
-two seconds, so the campaign is re-proved on every change rather than trusted.
+to prove it can actually be won. The full suite is 883 tests and runs in about
+three seconds, so the campaign is re-proved on every change rather than
+trusted.
+
+One rule there is weaker than it looks, and deliberately. The deal is not
+allowed to stack a color, but "no column is ever one color" is not something
+it can promise: a two-color picture cut into eight blocks and dealt into four
+columns must sometimes put a pair together, and four levels out of five
+hundred do. What the test pins is the thing the rule exists for — never three
+of a color in a row, never every column at once, and never on a picture that
+had a third color to deal instead.
 
 ## The screens
 
@@ -223,10 +257,11 @@ grid of four. `Play` picks up at the highest level reached rather than
 replaying level 1.
 
 Color Match's mode icons say something true: its jar fills with how far
-through the hundred levels you are. There are a hundred here too, so the
-picture list states it plainly — `n of 100 cleared` — rather than drawing a
-meter. The icon shows the mechanic instead, and the real numbers (level
-reached, best score) go in the subtitle.
+through the hundred levels you are. There are five hundred here, so the
+picture list states it plainly — `n of 500 cleared`, and `n of 100` again on
+each setting's heading — rather than drawing a meter. The icon shows the
+mechanic instead, and the real numbers (level reached, best score) go in the
+subtitle.
 
 **Settings** is reachable from home and from the board, so Color Blind Assist
 can be turned on without leaving a level. It holds what Color Match's does,
@@ -345,7 +380,7 @@ favicon.svg
 assets/               the Polite Carrot lockup
 app/                  committed build output: app.js, app.css
 src/                  the source Vite bundles into app/
-src/core/pictures.ts  the artwork library — 20 pictures, five levels each
+src/core/pictures.ts  the artwork library — 100 pictures, five levels each
 tools/check-levels.js deals the whole campaign and reports what it measured
 www/                  ignored — assembled by sync-web.js for the native shells
 ```
@@ -413,12 +448,12 @@ src/
     rng.ts         # seeded mulberry32, so levels are reproducible
     palette.ts     # the shared palette, letter marks, and the 150 rule
     picture.ts     # ASCII rows + a legend → a grid of tiles
-    pictures.ts    # the artwork library: 20 pictures, as data
+    pictures.ts    # the artwork library: 100 pictures, as data
     board.ts       # the grid, what "accessible" means, taking a color
     blocks.ts      # cutting blocks into columns, and the clump score
     generator.ts   # the five settings; deals a level and proves it winnable
     solve.ts       # the greedy solver the generator checks its work with
-    levels.ts      # 20 pictures × 5 settings → the hundred-level campaign
+    levels.ts      # 100 pictures × 5 settings → the 500-level campaign
     game.ts        # score, moves, undo, win/lose, the draining panel
     storage.ts     # progress, and whether it can be trusted
   render/renderer.ts   # DPR-aware canvas drawing + the countdown animation
@@ -524,13 +559,19 @@ render smaller.
 - When more tiles of a color are reachable than a block asks for, it takes the
   ones nearest the top-left. That is consistent and predictable but arbitrary —
   if the player should be choosing, this is the rule to change.
-- Twenty pictures, and they are the ceiling. A hundred levels come from
-  pairing them with five settings, so the campaign is as long as Color Match's
-  — but a picture is met five times, and the drawing is the slow part. More
-  artwork is the only thing that makes the campaign wider rather than longer.
+- A hundred pictures, and each is still met five times. The library is the
+  ceiling on variety the way the settings are the ceiling on length, and
+  drawing is the slow part — so more artwork is the only thing that makes the
+  campaign wider rather than longer.
 - A setting is uniform across the library. The Heart at Expert (11 blocks) and
   the Owl at Expert (47) sit in the same band, so the difficulty inside a run
-  of 20 still rises with the picture's size rather than being flat.
+  of 100 still rises with the picture's size rather than being flat. A setting
+  that scaled its block size to the picture would fix that; it would also make
+  the ramp harder to state, which is why it has not been done yet.
+- A picture is judged by eye, once. There is no test that says the Bear reads
+  as a bear — only that its rows are even and its colors far enough apart. The
+  contact sheet that catches the failures is a scratch tool, not part of the
+  repo, so a redraw that quietly stops reading would pass CI.
 - The hardest levels are hard because a wrong block costs a slot, not because
   they demand precision. A player who could see which colors are reachable
   would find them straightforward; that information is deliberately withheld.

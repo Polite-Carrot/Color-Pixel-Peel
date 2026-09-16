@@ -69,14 +69,36 @@ describe('dealing into columns', () => {
     }
   });
 
-  it('mixes the real levels rather than stacking a color', () => {
-    for (let i = 1; i <= LEVEL_COUNT; i += 7) {
+  /* What the deal can actually promise, across the whole campaign.
+   *
+   * Not "no column is ever one color": with a two-color picture cut into
+   * eight blocks and dealt into four columns, a pair of the same color
+   * landing together is a pigeonhole, not a bad shuffle. Four levels out
+   * of five hundred hit it (Lightning, Key and Raindrop at Easy, Star at
+   * Hard) and every one is a two-color picture with a column two deep.
+   *
+   * What matters is the thing that made this rule exist — a column the
+   * player looks at and sees only one color, so the choice between
+   * columns is no choice at all. So: never a run of three, never every
+   * column at once, and never on a picture with a third color to deal. */
+  it('never stacks a color deep or across every column', () => {
+    for (let i = 1; i <= LEVEL_COUNT; i += 1) {
       const def = levelDef(i);
       const dealt = dealColumns(def.blocks, def.columns, def.seed);
-      for (const [c, column] of dealt.entries()) {
-        if (column.length < 2) continue;
-        const colors = new Set(column.map((b) => b.color));
-        expect(colors.size, `level ${i} (${def.name}) column ${c} is one color`).toBeGreaterThan(1);
+      const playable = dealt.filter((column) => column.length >= 2);
+      const mono = playable.filter((column) => new Set(column.map((b) => b.color)).size === 1);
+
+      for (const column of mono) {
+        expect(column, `level ${i} (${def.name}) stacks ${column.length} of one color`).toHaveLength(2);
+      }
+      if (playable.length > 1) {
+        expect(mono.length, `level ${i} (${def.name}) is one color per column`).toBeLessThan(
+          playable.length,
+        );
+      }
+      if (mono.length > 0) {
+        const colors = new Set(def.blocks.map((b) => b.color));
+        expect(colors.size, `level ${i} (${def.name}) stacked a color it could have split`).toBe(2);
       }
     }
   });
